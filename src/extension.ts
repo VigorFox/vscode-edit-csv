@@ -2,11 +2,14 @@ import * as vscode from 'vscode';
 import * as path from "path";
 import { isCsvFile, getCurrentViewColumn, debugLog, partitionString } from './util';
 import { createEditorHtml } from './getHtml';
-import { InstanceManager, Instance } from './instanceManager';
+import { InstanceManager, Instance, SomeInstance } from './instanceManager';
 import { getExtensionConfiguration } from './configurationHelper';
+import * as chokidar from "chokidar";
 
 
 // const debounceDocumentChangeInMs = 1000
+
+//for a full list of context keys see https://code.visualstudio.com/docs/getstarted/keybindings#_when-clause-contexts
 
 /**
  * for editor uris this is the scheme to use
@@ -15,10 +18,13 @@ import { getExtensionConfiguration } from './configurationHelper';
 export const editorUriScheme = 'csv-edit'
 
 
-
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+
+	//from https://stackoverflow.com/questions/38267360/vscode-extension-api-identify-file-or-folder-click-in-explorer-context-menu
+	//to get a list of all known languages for: resourceLangId
+	// vscode.languages.getLanguages().then(l => console.log('languages', l));
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
@@ -158,12 +164,16 @@ export function activate(context: vscode.ExtensionContext) {
 	//we could use this hook to check if the file was changed (outside of the editor) and show a message to the user
 	//but we would need to distinguish our own changes from external changes...
 
-	// vscode.workspace.onDidChangeTextDocument(debounce((args: vscode.TextDocumentChangeEvent) => {
+	//this only works if the file is opened inside an editor (inside vs code) and visible (the current file)
+	//not working even if the file is in the current workspace (directoy), the file must be open and visible!
+	// vscode.workspace.onDidChangeTextDocument((args: vscode.TextDocumentChangeEvent) => {
 	// 	//see https://github.com/Microsoft/vscode/issues/50344
 	// 	//when dirty flag changes this is called
-	// 	if (args.contentChanges.length === 0) {
-	// 		return
-	// 	}
+	// 	// if (args.contentChanges.length === 0) {
+	// 	// 	return
+	// 	// }
+	// 	console.log(`onDidChangeTextDocument`, args)
+	// })
 
 	// 	if (!isCsvFile(args.document)) return //closed non-csv file ... we cannot have an editor for this document
 
@@ -174,7 +184,7 @@ export function activate(context: vscode.ExtensionContext) {
 	//	when the extension calls save the new file is not displayed
 	//	because we don't know the new uri we wait for new csv files to be opened and show them
 	//TODO can be improved to not show any opened csv file (e.g. from other extensions to only write to a file)
-	vscode.workspace.onDidOpenTextDocument((args) => {
+	const onDidOpenTextDocumentHandler = vscode.workspace.onDidOpenTextDocument((args) => {
 
 		//when we know the old uri then we could update the instance manager and the panel (e.g. title)...
 		//but for now we close the editor iff we saved an untitled file
@@ -193,14 +203,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// vscode.workspace.onDidSaveTextDocument(debounce((args: vscode.TextDocument) => {
 	// }, debounceDocumentChangeInMs))
-	vscode.workspace.onDidSaveTextDocument((args: vscode.TextDocument) => {
-		// console.log(`onDidSaveTextDocument ${args.uri.toString()}`);
-	})
+	// vscode.workspace.onDidSaveTextDocument((args: vscode.TextDocument) => {
+	// console.log(`onDidSaveTextDocument ${args.uri.toString()}`);
+	// })
 
 
 	//when an unnamed csv file is closed and we have an editor for it then close the editor
 	//	this is because we currently not updating the editor (e.g. title, uris) after an unnamed file is saved
-	vscode.workspace.onDidCloseTextDocument((args) => {
+	const onDidCloseTextDocumentHandler = vscode.workspace.onDidCloseTextDocument((args) => {
 
 		if (args.uri.scheme === editorUriScheme) return //closed an editor nothing to do here... onDispose will handle it
 
@@ -218,15 +228,42 @@ export function activate(context: vscode.ExtensionContext) {
 	//not needed because this changes only initial configuration...
 	// vscode.workspace.onDidChangeConfiguration((args) => {
 	// })
+	const onDidChangeConfigurationCallback = onDidChangeConfiguration.bind(undefined, instanceManager)
+	const onDidChangeConfigurationHandler = vscode.workspace.onDidChangeConfiguration(onDidChangeConfigurationCallback)
 
 	context.subscriptions.push(editCsvCommand)
 	context.subscriptions.push(gotoSourceCsvCommand)
 	context.subscriptions.push(applyCsvCommand)
 	context.subscriptions.push(applyAndSaveCsvCommand)
+	context.subscriptions.push(onDidOpenTextDocumentHandler)
+	context.subscriptions.push(onDidCloseTextDocumentHandler)
+	context.subscriptions.push(onDidChangeConfigurationHandler)
 }
 
 // this method is called when your extension is deactivated
 export function deactivate() { }
+
+/**
+ * called when the (extension?) config changes
+ * can be called manually to force update all instances
+ * @param e null to manually update all instances
+ */
+function onDidChangeConfiguration(instanceManager: InstanceManager, e: vscode.ConfigurationChangeEvent | null) {
+
+	if (e === null || e.affectsConfiguration('csv-edit.fontSizeInPx')) {
+		const newFontSize = getExtensionConfiguration().fontSizeInPx
+
+		const instances = instanceManager.getAllInstances()
+		for (let i = 0; i < instances.length; i++) {
+			const instance = instances[i];
+
+			instance.panel.webview.postMessage({
+				command: 'changeFontSizeInPx',
+				fontSizeInPx: newFontSize
+			} as RequestChangeFontSiteInPxMessage)
+		}
+	}
+}
 
 function getEditorTitle(document: vscode.TextDocument): string {
 	return `CSV edit ${path.basename(document.fileName)}`
@@ -236,35 +273,121 @@ function createNewEditorInstance(context: vscode.ExtensionContext, activeTextEdi
 
 	const uri = activeTextEditor.document.uri
 
-	const initialText = activeTextEditor.document.getText()
-
 	const title = getEditorTitle(activeTextEditor.document)
 
 	let panel = vscode.window.createWebviewPanel('csv-editor', title, getCurrentViewColumn(), {
-		enableFindWidget: true,
+		enableFindWidget: false, //we use our own find widget...
 		enableCommandUris: true,
 		enableScripts: true,
 		retainContextWhenHidden: true
 	})
 
-	let instance: Instance = {
-		panel: null as any,
-		sourceUri: uri,
-		editorUri: uri.with({
-			scheme: editorUriScheme
-		})
+	//check if the file is in the current workspace
+	let isInCurrentWorkspace = activeTextEditor.document.uri.fsPath !== vscode.workspace.asRelativePath(activeTextEditor.document.uri.fsPath)
+
+	const config = getExtensionConfiguration()
+
+	//a file watcher works when the file is in the current workspace (folder) even if it's not opened
+	//it also works when we open any file (not in the workspace) and 
+	//	we edit the file inside vs code
+	//	we edit outside vs code but the file is visible in vs code (active)
+	//it does NOT work when the file is not in the workspace and we edit the file outside of vs code and the file is not visible in vs code (active)
+	// const watcher = vscode.workspace.createFileSystemWatcher(activeTextEditor.document.fileName, true, false, true)
+
+	let instance: SomeInstance
+
+	// NOTE that watching new files (untitled) is not supported by this is probably no issue...
+
+	if (isInCurrentWorkspace) {
+
+		let watcher: vscode.FileSystemWatcher | null = null
+
+		if (config.shouldWatchCsvSourceFile) {
+			//if the file is in the current workspace we the file model in vs code is always synced so is this (faster reads/cached)
+			watcher = vscode.workspace.createFileSystemWatcher(activeTextEditor.document.fileName, true, false, true)
+
+			//not needed because on apply changes we create a new file if this is needed
+			watcher.onDidChange((e) => {
+				if (instance.ignoreNextChangeEvent) {
+					instance.ignoreNextChangeEvent = false
+					debugLog(`source file changed: ${e.fsPath}, ignored`)
+					return
+				}
+
+				debugLog(`source file changed: ${e.fsPath}`)
+				onSourceFileChanged(e.fsPath, instance)
+			})
+		}
+
+		instance = {
+			kind: 'workspaceFile',
+			panel: null as any,
+			sourceUri: uri,
+			editorUri: uri.with({
+				scheme: editorUriScheme
+			}),
+			hasChanges: false,
+			originalTitle: title,
+			sourceFileWatcher: watcher,
+			document: activeTextEditor.document,
+			supportsAutoReload: true,
+			ignoreNextChangeEvent: false,
+		}
+
+	} else {
+
+		let watcher: chokidar.FSWatcher | null = null
+
+		if (config.shouldWatchCsvSourceFile) {
+			//the problem with this is that it is faster than the file model (in vs code) can sync the file...
+			watcher = chokidar.watch(activeTextEditor.document.fileName)
+
+			watcher.on('change', (path) => {
+
+				if (instance.ignoreNextChangeEvent) {
+					instance.ignoreNextChangeEvent = false
+					debugLog(`source file (external) changed: ${path}, ignored`)
+					return
+				}
+				debugLog(`source file (external) changed: ${path}`)
+				onSourceFileChanged(path, instance)
+			})
+		}
+
+		instance = {
+			kind: 'externalFile',
+			panel: null as any,
+			sourceUri: uri,
+			editorUri: uri.with({
+				scheme: editorUriScheme
+			}),
+			hasChanges: false,
+			originalTitle: title,
+			sourceFileWatcher: watcher,
+			document: activeTextEditor.document,
+			supportsAutoReload: false,
+			ignoreNextChangeEvent: false,
+		}
 	}
 
 	try {
 		instanceManager.addInstance(instance)
 	} catch (error) {
-		vscode.window.showErrorMessage(`Could not create an editor instance, error: ${error.message}`);
+		vscode.window.showErrorMessage(`Could not create an editor instance, error: ${error.message}`)
+
+		if (instance.kind === 'workspaceFile') {
+			instance.sourceFileWatcher?.dispose()
+		} else {
+			instance.sourceFileWatcher?.close()
+		}
+
 		return
 	}
 
+
 	//just set the panel if we added the instance
 	instance.panel = panel
-	const config = getExtensionConfiguration()
+
 
 	panel.webview.onDidReceiveMessage((message: PostMessage) => {
 
@@ -274,30 +397,82 @@ function createNewEditorInstance(context: vscode.ExtensionContext, activeTextEdi
 
 				debugLog('received ready from webview')
 
-				const textSlices = partitionString(initialText, 1024 * 1024) //<1MB less should be loaded in a blink
+				instance.hasChanges = false
+				setEditorHasChanges(instance, false)
 
-				for (let i = 0; i < textSlices.length; i++) {
-					const textSlice = textSlices[i];
+				let funcSendContent = (initialText: string) => {
+					const textSlices = partitionString(initialText, 1024 * 1024) //<1MB less should be loaded in a blink
 
-					const msg: ReceivedMessageFromVsCode = {
-						command: "csvUpdate",
-						csvContent: {
-							text: textSlice.text,
-							sliceNr: textSlice.sliceNr,
-							totalSlices: textSlice.totalSlices
+					for (let i = 0; i < textSlices.length; i++) {
+						const textSlice = textSlices[i];
+
+						const msg: ReceivedMessageFromVsCode = {
+							command: "csvUpdate",
+							csvContent: {
+								text: textSlice.text,
+								sliceNr: textSlice.sliceNr,
+								totalSlices: textSlice.totalSlices
+							}
 						}
-					}
 
-					panel.webview.postMessage(msg)
+						panel.webview.postMessage(msg)
+					}
 				}
 
+				if (isInCurrentWorkspace === false) {
+					//slow path
+					//external files are normally not synced so better read the file...
 
-				// const msg: ReceivedMessageFromVsCode = {
-				// 	command:"csvUpdate",
-				// 	csvContent: initialText
-				// }
+					// vscode.workspace.fs.readFile(instance.sourceUri)
+					// 	.then(content => {
 
-				//panel.webview.postMessage(msg)
+					// 		console.log(`encoding`)
+					// 		//TODO get encoding????
+					// 		//see https://github.com/microsoft/vscode/issues/824
+					// const text = Buffer.from(content).toString('utf-8')
+					// 		funcSendContent(text)
+
+					// 	}, error => {
+					// 		vscode.window.showErrorMessage(`could not read the source file, error: ${error?.message}`);
+					// 	})
+
+					//TODO
+					//THIS might not get the up-to-date state of the file on the disk
+					//but vs code api cannot get the file encoding (so that we could use vscode.workspace.fs.readFile)
+					//or allow us to force to updat the memory model in vs code of the file...
+
+					//see https://github.com/microsoft/vscode/issues/824
+					//see https://github.com/microsoft/vscode/issues/3025
+
+					//in case we closed the file (we have an old view/model of the file) open it again
+					vscode.workspace.openTextDocument(instance.sourceUri)
+						.then(
+							document => {
+								funcSendContent(document.getText())
+							}, error => {
+								vscode.window.showErrorMessage(`could not read the source file, error: ${error?.message}`);
+							}
+						)
+
+				} else if (activeTextEditor.document.isClosed) {
+					//slow path
+					//not synchronized anymore...
+					//we need to get the real file content from disk
+					vscode.workspace.openTextDocument(instance.sourceUri)
+						.then(
+							document => {
+								funcSendContent(document.getText())
+							}, error => {
+								vscode.window.showErrorMessage(`could not read the source file, error: ${error?.message}`);
+							}
+						)
+
+				} else {
+					//fast path
+					//file is still open and synchronized
+					let initialText = activeTextEditor.document.getText()
+					funcSendContent(initialText)
+				}
 
 				debugLog('finished sending csv content to webview')
 
@@ -306,13 +481,13 @@ function createNewEditorInstance(context: vscode.ExtensionContext, activeTextEdi
 			case "msgBox": {
 
 				if (message.type === 'info') {
-					vscode.window.showInformationMessage(message.content);
+					vscode.window.showInformationMessage(message.content)
 
 				} else if (message.type === 'warn') {
-					vscode.window.showWarningMessage(message.content);
+					vscode.window.showWarningMessage(message.content)
 
 				} else if (message.type === 'error') {
-					vscode.window.showErrorMessage(message.content);
+					vscode.window.showErrorMessage(message.content)
 
 				} else {
 					const _msg = `unknown show message box type: ${message.type}, message: ${message.content}`
@@ -332,27 +507,49 @@ function createNewEditorInstance(context: vscode.ExtensionContext, activeTextEdi
 				break
 			}
 
-			default: {
-				vscode.window.showErrorMessage(`Received unknown post message from extension: ${JSON.stringify(message)}`);
+			case "setHasChanges": {
+				instance.hasChanges = message.hasChanges
+				setEditorHasChanges(instance, message.hasChanges)
 				break
 			}
+
+			default: notExhaustive(message, `Received unknown post message from extension: ${JSON.stringify(message)}`)
 		}
 
 	}, undefined, context.subscriptions)
 
 	panel.onDidDispose(() => {
+
+		debugLog(`dispose csv editor panel (webview)`)
+
 		try {
 			instanceManager.removeInstance(instance)
 		} catch (error) {
 			vscode.window.showErrorMessage(`Could not destroy an editor instance, error: ${error.message}`);
 		}
+
+		try {
+
+			if (instance.kind === 'workspaceFile') {
+				instance.sourceFileWatcher?.dispose()
+			} else {
+				instance.sourceFileWatcher?.close()
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`Could not dispose source file watcher for file ${instance.document.uri.fsPath}, error: ${error.message}`);
+		}
+
 	}, null, context.subscriptions)
 
-
-	panel.webview.html = createEditorHtml(context, initialText)
+	panel.webview.html = createEditorHtml(panel.webview, context, {
+		isWatchingSourceFile: instance.supportsAutoReload
+	})
 
 }
 
+/**
+ * tries to apply (replace the whole file content) with the new content
+ */
 function applyContent(instance: Instance, newContent: string, saveSourceFile: boolean, openSourceFileAfterApply: boolean) {
 
 	vscode.workspace.openTextDocument(instance.sourceUri)
@@ -367,11 +564,17 @@ function applyContent(instance: Instance, newContent: string, saveSourceFile: bo
 				document.lineCount - 1,
 				lastLine.range.end.character);
 
+			//don't apply if the content didn't change
+			if (document.getText() === newContent) {
+				debugLog(`content didn't change`)
+				return
+			}
+
 			edit.replace(document.uri, textRange, newContent)
 			vscode.workspace.applyEdit(edit)
 				.then(
 					editsApplied => {
-						_afterEditsApplied(document, editsApplied, saveSourceFile, openSourceFileAfterApply)
+						_afterEditsApplied(instance, document, editsApplied, saveSourceFile, openSourceFileAfterApply)
 					},
 					(reason) => {
 						console.warn(`Error applying edits`)
@@ -398,13 +601,29 @@ function applyContent(instance: Instance, newContent: string, saveSourceFile: bo
 
 		},
 			(reason) => {
-				console.warn(`Could not find the source file`);
-				console.warn(reason);
-				vscode.window.showErrorMessage(`Could not find the source file`)
+
+				//maybe the source file was deleted...
+				//see https://github.com/microsoft/vscode-extension-samples/pull/195/files
+
+				console.warn(`Could not find the source file, trying to access it and create a temp file with the same path...`)
+				console.warn(reason)
+
+				vscode.workspace.fs.stat(instance.sourceUri).
+					then(fileStat => {
+						//file exists and can be accessed
+						vscode.window.showErrorMessage(`Could apply changed because the source file could not be found`)
+
+					}, error => {
+
+						//file is probably deleted
+						// vscode.window.showWarningMessageMessage(`The source file could not be found and was probably deleted.`)
+						createNewSourceFile(instance, newContent, openSourceFileAfterApply, saveSourceFile)
+					})
+
 			})
 }
 
-function _afterEditsApplied(document: vscode.TextDocument, editsApplied: boolean, saveSourceFile: boolean, openSourceFileAfterApply: boolean) {
+function _afterEditsApplied(instance: Instance, document: vscode.TextDocument, editsApplied: boolean, saveSourceFile: boolean, openSourceFileAfterApply: boolean) {
 
 	const afterShowDocument = () => {
 		if (!editsApplied) {
@@ -414,20 +633,27 @@ function _afterEditsApplied(document: vscode.TextDocument, editsApplied: boolean
 		}
 
 		if (saveSourceFile) {
+			instance.ignoreNextChangeEvent = true
 			document.save()
 				.then(
 					wasSaved => {
 						if (!wasSaved) {
 							console.warn(`Could not save csv file`)
 							vscode.window.showErrorMessage(`Could not save csv file`)
+							return
 						}
+
+						setEditorHasChanges(instance, false)
 					},
 					(reason) => {
 						console.warn(`Error saving csv file`)
 						console.warn(reason); //will be null e.g. no permission denied when saved manually
 						vscode.window.showErrorMessage(`Error saving csv file`)
 					})
+			return
 		}
+
+		setEditorHasChanges(instance, false)
 	}
 
 	//also works for unnamed files... they will not be displayed after save
@@ -440,6 +666,63 @@ function _afterEditsApplied(document: vscode.TextDocument, editsApplied: boolean
 	else {
 		afterShowDocument()
 	}
+
+}
+
+/**
+ * tries to create a new tmp file (untitled:URI.fsPath) so that the user can decide to save or discard it
+ * @param instance 
+ * @param newContent 
+ * @param openSourceFileAfterApply 
+ */
+function createNewSourceFile(instance: Instance, newContent: string, openSourceFileAfterApply: boolean, saveSourceFile: boolean) {
+
+	//TODO i'm not sure if this also works for remote file systems...
+	//see https://stackoverflow.com/questions/41068197/vscode-create-unsaved-file-and-add-content
+	const newSourceFile = vscode.Uri.parse(`untitled:${instance.sourceUri.fsPath}`)
+
+	vscode.workspace.openTextDocument(newSourceFile)
+		.then(newFile => {
+
+			const edit = new vscode.WorkspaceEdit()
+			edit.insert(newSourceFile, new vscode.Position(0, 0), newContent)
+
+			vscode.workspace.applyEdit(edit).then(success => {
+
+				if (!success) {
+					debugLog('could not created new source file because old was deleted')
+					return
+				}
+
+				debugLog('created new source file because old was deleted')
+
+				if (openSourceFileAfterApply) {
+					vscode.window.showTextDocument(newFile)
+				}
+
+				if (saveSourceFile) {
+					newFile.save().then(successSave => {
+
+						if (!successSave) {
+							vscode.window.showErrorMessage(`Could not save new source file (old was deleted)`)
+							return
+						}
+
+						//successfully saved
+
+					}, error => {
+						vscode.window.showErrorMessage(`Could not save new source file (old was deleted), error: ${error?.message}`)
+					})
+				}
+
+
+			}, error => {
+				vscode.window.showErrorMessage(`Could not create new source file (old was deleted), error: ${error?.message}`)
+			})
+
+		}, error => {
+			vscode.window.showErrorMessage(`Could not open new source file, error: ${error?.message}`)
+		})
 
 }
 
@@ -466,6 +749,32 @@ function getActiveEditorInstance(instanceManager: InstanceManager): Instance | n
 
 	return instance
 }
+
+function notExhaustive(x: never, message: string): never {
+	vscode.window.showErrorMessage(message);
+	throw new Error(message)
+}
+
+function setEditorHasChanges(instance: Instance, hasChanges: boolean) {
+	instance.panel.title = `${hasChanges ? '* ' : ''}${instance.originalTitle}`
+}
+
+function onSourceFileChanged(path: string, instance: Instance) {
+
+	if (!instance.supportsAutoReload) {
+		vscode.window.showWarningMessage(`The csv source file '${instance.document.fileName}' changed and it is not in the current workspace. Thus the content could not be automatically reloaded. Please open/display the file in vs code and switch back the to table. Then you need to manually reload the table with the reload button. Alternatively just close the table and reopen it.`, {
+			modal: false,
+
+		})
+		return
+	}
+
+	const msg: SourceFileChangedMessage = {
+		command: 'sourceFileChanged'
+	}
+	instance.panel.webview.postMessage(msg)
+}
+
 
 // class CsvEditStateSerializer  implements vscode.WebviewPanelSerializer{
 

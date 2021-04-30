@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { editorUriScheme } from './extension';
+import { limitSingleCharacterString } from "./util";
 
 
 
@@ -7,9 +8,7 @@ const defaultConfig: CsvEditSettings = {
 	highlightCsvComments: true,
 	lastRowEnterBehavior: 'default',
 	lastColumnTabBehavior: 'default',
-	previewOptionsAppearance: "collapsed",
-	writeOptionsAppearance: "collapsed",
-	readOptionsAppearance: "collapsed",
+	optionsBarAppearance: "collapsed",
 	readOption_comment: "#",
 	readOption_quoteChar: '"',
 	readOption_escapeChar: '"',
@@ -24,6 +23,22 @@ const defaultConfig: CsvEditSettings = {
 	openSourceFileAfterApply: false,
 	selectTextAfterBeginEditCell: false,
 	quoteAllFields: false,
+	quoteEmptyOrNullFields: 'false',
+	initiallyHideComments: false,
+	enableWrapping: true,
+	initialColumnWidth: 0,
+	retainQuoteInformation: true,
+	newColumnQuoteInformationIsQuoted: false,
+	disableBorders: false,
+	initiallyFixedRowsTop: 0,
+	initiallyFixedColumnsLeft: 0,
+	fontSizeInPx: 16,
+	showColumnHeaderNamesWithLettersLikeExcel: false,
+	shouldWatchCsvSourceFile: true,
+	sidePanelAppearance: 'collapsed',
+	initialNumbersStyle: 'en',
+	insertRowBehavior: 'keepRowKeepColumn',
+	insertColBehavior: 'keepRowKeepColumn',
 }
 
 /**
@@ -47,6 +62,12 @@ export function getExtensionConfiguration(): CsvEditSettings {
 		//@ts-ignore
 		copy[key] = optionValue
 	}
+
+	//ensure single character requirements
+	copy.readOption_quoteChar = limitSingleCharacterString(copy.readOption_quoteChar)
+	copy.readOption_escapeChar = limitSingleCharacterString(copy.readOption_escapeChar)
+	copy.writeOption_quoteChar = limitSingleCharacterString(copy.writeOption_quoteChar)
+	copy.writeOption_escapeChar = limitSingleCharacterString(copy.writeOption_escapeChar)
 
 	return copy
 }

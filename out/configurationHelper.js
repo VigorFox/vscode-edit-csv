@@ -1,14 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getExtensionConfiguration = void 0;
 const vscode = require("vscode");
 const extension_1 = require("./extension");
+const util_1 = require("./util");
 const defaultConfig = {
     highlightCsvComments: true,
     lastRowEnterBehavior: 'default',
     lastColumnTabBehavior: 'default',
-    previewOptionsAppearance: "collapsed",
-    writeOptionsAppearance: "collapsed",
-    readOptionsAppearance: "collapsed",
+    optionsBarAppearance: "collapsed",
     readOption_comment: "#",
     readOption_quoteChar: '"',
     readOption_escapeChar: '"',
@@ -23,6 +23,22 @@ const defaultConfig = {
     openSourceFileAfterApply: false,
     selectTextAfterBeginEditCell: false,
     quoteAllFields: false,
+    quoteEmptyOrNullFields: 'false',
+    initiallyHideComments: false,
+    enableWrapping: true,
+    initialColumnWidth: 0,
+    retainQuoteInformation: true,
+    newColumnQuoteInformationIsQuoted: false,
+    disableBorders: false,
+    initiallyFixedRowsTop: 0,
+    initiallyFixedColumnsLeft: 0,
+    fontSizeInPx: 16,
+    showColumnHeaderNamesWithLettersLikeExcel: false,
+    shouldWatchCsvSourceFile: true,
+    sidePanelAppearance: 'collapsed',
+    initialNumbersStyle: 'en',
+    insertRowBehavior: 'keepRowKeepColumn',
+    insertColBehavior: 'keepRowKeepColumn',
 };
 /**
  * returns the configuration for this extension
@@ -39,6 +55,11 @@ function getExtensionConfiguration() {
         //@ts-ignore
         copy[key] = optionValue;
     }
+    //ensure single character requirements
+    copy.readOption_quoteChar = util_1.limitSingleCharacterString(copy.readOption_quoteChar);
+    copy.readOption_escapeChar = util_1.limitSingleCharacterString(copy.readOption_escapeChar);
+    copy.writeOption_quoteChar = util_1.limitSingleCharacterString(copy.writeOption_quoteChar);
+    copy.writeOption_escapeChar = util_1.limitSingleCharacterString(copy.writeOption_escapeChar);
     return copy;
 }
 exports.getExtensionConfiguration = getExtensionConfiguration;

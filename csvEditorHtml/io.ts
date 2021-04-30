@@ -12,16 +12,34 @@
 * @param {string} content 
 * @returns {[string[], string[][], string[]]| null} [0] comments before, [1] csv data, [2] comments after
 */
-function parseCsv(content: string, csvReadOptions: CsvReadOptions): string[][] | null {
+function parseCsv(content: string, csvReadOptions: CsvReadOptions): ExtendedCsvParseResult | null {
 
 	if (content === '') {
 		content = defaultCsvContentIfEmpty
 	}
 
+	//comments are parses as normal text, only one cell is added
 	const parseResult = csv.parse(content, {
 		...csvReadOptions,
 		comments: false, //false gives use all lines we later check each line if it's a comment to merge the cells in that row
-	})
+		//left trimmed lines are comments and if !== null we want to include comments as one celled row (in the ui)
+		//papaparse parses comments with this only if the begin with the comment string (no space before!!)
+		rowInsertCommentLines_commentsString: typeof csvReadOptions.comments === 'string' && csvReadOptions.comments !== '' ? csvReadOptions.comments : null,
+		// fastMode: false //monkeypatch must work with normal and fast mode...
+		/**
+		 * normally when parsing quotes are discarded as they don't change the retrieved data
+		 * true: quote information are returned as part of the parse result, for each column:
+		 * 	 true: column was quoted
+		 * 	 false: column was not quoted
+		 * false: quote information is returned as null or undefined (falsy)
+		 * 
+		 * to determine if a column is quoted we use the first cell only (if a column has no cells then it's not quoted)
+		 * so if the first line has only 3 columns and all other more than 3 (e.g. 4) then all columns starting from 4 are treated as not quoted!!
+		 * not that there is no difference if we have column headers (first row is used)
+		 * comment rows are ignored for this
+		 */
+		retainQuoteInformation: true, //we keep true here and decide if we use it whe nwe output data
+	} as any)
 
 	if (parseResult.errors.length === 1 && parseResult.errors[0].type === 'Delimiter' && parseResult.errors[0].code === 'UndetectableDelimiter') {
 		//this is ok papaparse will default to ,
@@ -36,12 +54,18 @@ function parseCsv(content: string, csvReadOptions: CsvReadOptions): string[][] |
 					continue;
 				}
 
-				if (error.row) {
-					_error(`${error.message} on line ${error.row}`)
+				if (typeof error.row === 'number') {
+					statusInfo.innerText = `Error`
+					const errorMsg = `${error.message} on line ${error.row+1}`
+					csvEditorDiv.innerText = errorMsg
+					_error(errorMsg) //row is 0 based
 					continue
 				}
 
-				_error(`${error.message}`)
+				statusInfo.innerText = `Error`
+				const errorMsg = `${error.message}`
+				csvEditorDiv.innerText = errorMsg
+				_error(errorMsg)
 			}
 
 			return null
@@ -50,10 +74,21 @@ function parseCsv(content: string, csvReadOptions: CsvReadOptions): string[][] |
 
 	defaultCsvWriteOptions.delimiter = parseResult.meta.delimiter
 	newLineFromInput = parseResult.meta.linebreak
+	updateNewLineSelect()
 
-	readDelimiterTooltip.setAttribute('data-tooltip', `${readDelimiterTooltipText} (detected: ${defaultCsvWriteOptions.delimiter})`)
+	readDelimiterTooltip.setAttribute('data-tooltip', `${readDelimiterTooltipText} (detected: ${defaultCsvWriteOptions.delimiter.replace("\t", "⇥")})`)
 
-	return parseResult.data
+	return {
+		data: parseResult.data,
+		columnIsQuoted: (parseResult as any).columnIsQuoted
+	}
+}
+
+/*+
+* updates the new line select option (same as input) {@link newlineSameSsInputOption} from {@link newLineFromInput}
+*/
+function updateNewLineSelect() {
+	newlineSameSsInputOption.innerText = `${newlineSameSsInputOptionText} (${newLineFromInput === `\n` ? 'LF' : 'CRLF'})`
 }
 
 
@@ -70,14 +105,65 @@ function getData(): string[][] {
 }
 
 /**
- * @returns {string[]} the first row of the data or an empty array
+ * if we have an header row already it is ignored here!!
  */
-function getFirstRow(): string[] {
-	if (!hot) return []
+function getFirstRowWithIndex(skipCommentLines: boolean = true): HeaderRowWithIndex | null {
+	if (!hot) return null
 
-	if (hot.countRows() === 0) return []
+	const rowCount = hot.countRows()
+	if (rowCount === 0) return null
 
-	return [...hot.getDataAtRow(0)] //make a copy to not get a reference
+	let firstDataRow: string[] = []
+	let rowIndex = -1
+
+	for (let i = 0; i < rowCount; i++) {
+		const row = hot.getDataAtRow(i)
+		if (row.length === 0) continue
+		
+		if (skipCommentLines && isCommentCell(row[0], defaultCsvReadOptions)) continue
+
+		firstDataRow = [...row] //make a copy to not get a reference
+		rowIndex = i
+		break
+	}
+
+	if (rowIndex === -1) {
+		return null
+	}
+
+	return {
+		physicalIndex: rowIndex,
+		row: firstDataRow
+	}
+}
+
+function getFirstRowWithIndexByData(data: string[][], skipCommentLines: boolean = true): HeaderRowWithIndex | null {
+
+	const rowCount = data.length
+	if (rowCount === 0) return null
+
+	let firstDataRow: string[] = []
+	let rowIndex = -1
+
+	for (let i = 0; i < rowCount; i++) {
+		const row = data[i]
+		if (row.length === 0) continue
+		
+		if (skipCommentLines && isCommentCell(row[0], defaultCsvReadOptions)) continue
+
+		firstDataRow = [...row] //make a copy to not get a reference
+		rowIndex = i
+		break
+	}
+
+	if (rowIndex === -1) {
+		return null
+	}
+
+	return {
+		physicalIndex: rowIndex,
+		row: firstDataRow
+	}
 }
 
 /**
@@ -97,6 +183,9 @@ function getDataAsCsv(csvReadOptions: CsvReadOptions, csvWriteOptions: CsvWriteO
 	const _conf: import('papaparse').UnparseConfig = {
 		...csvWriteOptions,
 		quotes: csvWriteOptions.quoteAllFields,
+		//custom created option to handle null, undefined and empty string values
+		//@ts-ignore
+		quoteEmptyOrNullFields: csvWriteOptions.quoteEmptyOrNullFields,
 	}
 
 	if (csvWriteOptions.header) {
@@ -104,19 +193,18 @@ function getDataAsCsv(csvReadOptions: CsvReadOptions, csvWriteOptions: CsvWriteO
 		//write the header...
 		if (!hot) throw new Error('table was null')
 
-		const colHeaderCells = hot.getColHeader() as string[]
-		//@ts-ignore
-		if (hot.getSettings().colHeaders === defaultColHeaderFunc) {
+		if (headerRowWithIndex === null) {
+			const colHeaderCells = hot.getColHeader() as string[]
 			//default headers... because the actual header string is html we need to generate the string only column headers
 			data.unshift(colHeaderCells.map((p: string, index: number) => getSpreadsheetColumnLabel(index)))
 		}
 		else {
 
-			if (headerRow === null) {
+			if (headerRowWithIndex === null) {
 				throw new Error('header row was null')
 			}
 
-			data.unshift(headerRow.map<string>((val) => val !== null ? val : ''))
+			data.unshift(headerRowWithIndex.row.map<string>((val) => val !== null ? val : ''))
 		}
 	}
 
@@ -127,13 +215,17 @@ function getDataAsCsv(csvReadOptions: CsvReadOptions, csvWriteOptions: CsvWriteO
 
 		if (typeof csvReadOptions.comments === 'string'
 			&& typeof csvWriteOptions.comments === 'string'
-			&& row[0].trim().startsWith(csvReadOptions.comments)) {
+			&& isCommentCell(row[0], csvReadOptions)) { 
 			//this is a comment
-			// data[i] = [`${csvWriteOptions.comments}${row[0].trim().substring(csvReadOptions.comments.length)}`]
-			row[0] = row[0].trim().substring(csvReadOptions.comments.length)
-			_compressCommentRow(row)
-			// data[i] = [`${csvWriteOptions.comments}${csv.unparse([row], _conf)}`]
-			data[i] = [`${csvWriteOptions.comments}${row.join(" ")}`]
+
+			//we expanded comment rows to have the max length
+			//we monkeypatched papaparse so that comments are treated as normal text (1 cell)
+			//so just take the first cell/column
+
+			const index = row[0].indexOf(csvReadOptions.comments)
+			//trim left else papaparse (and probably other programs) will not recognize the comment anymore...
+			row[0] = `${row[0].substring(0, index)}${csvWriteOptions.comments}${row[0].substring(index+csvReadOptions.comments.length)}`.trimLeft().replace(/\n/mg, "")
+
 		}
 
 	}
@@ -143,38 +235,41 @@ function getDataAsCsv(csvReadOptions: CsvReadOptions, csvWriteOptions: CsvWriteO
 	//@ts-ignore
 	_conf['skipEmptyLines'] = false
 
+	//a custom param
+	//rowInsertCommentLines_commentsString: trim left comment lines and only export first cell
+	//@ts-ignore
+	_conf['rowInsertCommentLines_commentsString'] = typeof csvWriteOptions.comments === 'string' ? csvWriteOptions.comments : null
+
+	//@ts-ignore
+	_conf['columnIsQuoted'] = csvWriteOptions.retainQuoteInformation ? columnIsQuoted : null
+
 	let dataAsString = csv.unparse(data, _conf)
 
 	return dataAsString
 }
 
-/**
- * removes all empty trailing cells
- * @param row 
- */
-function _compressCommentRow(row: string[]) {
-
-	let delCount = 0
-	for (let i = row.length - 1; i > 0; i--) {
-		const cell = row[i];
-		if (cell === null || cell === '') {
-			delCount++
-			continue
-		}
-
-		break
-	}
-
-	row.splice(row.length - delCount, delCount)
-}
 
 /* --- messages back to vs code --- */
+
+/**
+ * called to read the source file again
+ * @param text 
+ */
+function postReloadFile() {
+
+	if (!vscode) {
+		console.log(`postReloadFile (but in browser)`)
+		return
+	}
+
+	_postReadyMessage()
+}
 
 /**
  * called to display the given text in vs code 
  * @param text 
  */
-function postVsInformation(text: string) {
+var postVsInformation = (text: string) => {
 
 	if (!vscode) {
 		console.log(`postVsInformation (but in browser)`)
@@ -191,7 +286,7 @@ function postVsInformation(text: string) {
  * called to display the given text in vs code 
  * @param text 
  */
-function postVsWarning(text: string) {
+var postVsWarning = (text: string) => {
 
 	if (!vscode) {
 		console.log(`postVsWarning (but in browser)`)
@@ -208,7 +303,7 @@ function postVsWarning(text: string) {
  * called to display the given text in vs code 
  * @param text 
  */
-function postVsError(text: string) {
+var postVsError = (text: string) => {
 
 	if (!vscode) {
 		console.log(`postVsError (but in browser)`)
@@ -224,12 +319,13 @@ function postVsError(text: string) {
 
 /**
  * called to copy the text to the clipboard through vs code
- * @param text the text to copy 
+ * @param text the text to copy
  */
 function postCopyToClipboard(text: string) {
 
 	if (!vscode) {
 		console.log(`postCopyToClipboard (but in browser)`)
+		navigator.clipboard.writeText(text)
 		return
 	}
 
@@ -240,11 +336,32 @@ function postCopyToClipboard(text: string) {
 }
 
 /**
+ * called to change the editor title through vs code
+ * @param text the new title
+ */
+function postSetEditorHasChanges(hasChanges: boolean) {
+
+	_setHasUnsavedChangesUiIndicator(hasChanges)
+
+	if (!vscode) {
+		console.log(`postSetEditorHasChanges (but in browser)`)
+		return
+	}
+
+	vscode.postMessage({
+		command: 'setHasChanges',
+		hasChanges
+	})
+}
+
+/**
  * called to save the current edit state back to the file
  * @param csvContent 
  * @param saveSourceFile 
  */
 function _postApplyContent(csvContent: string, saveSourceFile: boolean) {
+
+	_setHasUnsavedChangesUiIndicator(false)
 
 	if (!vscode) {
 		console.log(`_postApplyContent (but in browser)`)
@@ -302,8 +419,28 @@ function handleVsCodeMessage(event: { data: ReceivedMessageFromVsCode }) {
 			break
 		}
 
+		case 'changeFontSizeInPx': {
+			changeFontSizeInPx(message.fontSizeInPx)
+			break
+		}
+
+		case 'sourceFileChanged': {
+
+			const hasAnyChanges = getHasAnyChangesUi()
+
+			if (!hasAnyChanges) {
+				//just relaod the file because we have no changes anyway...
+				reloadFileFromDisk()
+				return
+			}
+
+			toggleSourceFileChangedModalDiv(true)
+			break
+		}
+
 		default: {
 			_error('received unknown message from vs code')
+			notExhaustiveSwitch(message)
 			break
 		}
 	}
@@ -315,6 +452,7 @@ function onReceiveCsvContentSlice(slice: StringSlice) {
 	if (slice.sliceNr === 1) {
 		initialContent = ''
 		statusInfo.innerText = `Receiving csv...`
+		csvEditorDiv.innerText = ``
 	}
 
 	initialContent += slice.text
@@ -332,10 +470,22 @@ function onReceiveCsvContentSlice(slice: StringSlice) {
 
 /**
  * performs the last steps to actually show the data (set status, render table, ...)
+ * also called on reset data
  */
-function startRenderData() {
+function startRenderData(){
 
 	statusInfo.innerText = `Rendering table...`
+
+	//TODO as we don't longer use undo/redo with has header option this might not be necessary any longer...
+	//we need to change defaultCsvReadOptions because the undo/redo might mess up our
+	//defaultCsvReadOptions._hasHeader state... so ensure it's in sync with the ui
+	if (hasHeaderReadOptionInput.checked) {
+		isFirstHasHeaderChangedEvent = true
+		defaultCsvReadOptions._hasHeader = true
+	} else {
+		isFirstHasHeaderChangedEvent = false
+		defaultCsvReadOptions._hasHeader = false
+	}
 
 	call_after_DOM_updated(() => {
 
@@ -344,9 +494,12 @@ function startRenderData() {
 		
 		//profiling shows that handsontable calls some column resize function which causes the last hang...
 		//status display should be cleared after the handsontable operation so enqueue
-		setTimeout(() => {
-			statusInfo.innerText = '';
-		}, 0)
+		if (!defaultCsvReadOptions._hasHeader) { //when we apply header this will reset the status for us
+			setTimeout(() => {
+				statusInfo.innerText = '';
+			}, 0)
+		}
+		
 	})
 
 }
@@ -356,4 +509,8 @@ function startRenderData() {
 function call_after_DOM_updated(fn: any) {
 	var intermediate = function () { window.requestAnimationFrame(fn) }
 	window.requestAnimationFrame(intermediate)
+}
+
+function notExhaustiveSwitch(x: never): never {
+	throw new Error('not exhaustive switch')
 }
