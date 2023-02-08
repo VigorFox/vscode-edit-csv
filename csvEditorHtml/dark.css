@@ -1,13 +1,9 @@
 
 body.vscode-dark {
 	color: #d0d0d0;
-}
 
-.vscode-dark input.input,
-.vscode-dark .textarea {
-	background-color: #504f4f;
-	color: #d0d0d0;
-	border-color: #8e8e8e;
+	--button-icon-background: transparent;
+	--button-icon-hover-background: rgba(90, 93, 94, 0.31);
 }
 
 .vscode-dark input.input::placeholder {
@@ -211,7 +207,8 @@ body.vscode-dark {
 }
 
 .vscode-dark .find-widget {
-	background-color: rgb(51, 51, 51);
+	background-color: #2a2a2a;
+	/* filter: brightness(120%); */
 }
 
 .vscode-dark .find-widget .divider {
@@ -219,7 +216,8 @@ body.vscode-dark {
 }
 
 .vscode-dark .find-widget .btn.active {
-	background-color: #3384ff;
+	border-color: rgba(0, 122, 204, 0);
+	background-color: rgba(0, 127, 212, 0.4);
 }
 
 .vscode-dark .find-widget .error-message {
@@ -227,16 +225,22 @@ body.vscode-dark {
 }
 
 .vscode-dark .options-title {
-	font-size: 130%;
 	color: #d0d0d0;
 }
 
 .vscode-dark .all-options table {
-	border: 1px solid #8e8e8e;
-	border-collapse: initial;
-	border-radius: 10px;
+	border: 1px solid #5e5e5e;
 }
 
 .vscode-dark a {
 	color: #5c9bff;
+}
+
+.vscode-dark .handsontable .htDimmed {
+	/*color: #b7b7b7*/ /*harder to read*/
+	color: inherit;
+}
+
+.vscode-dark .row-col-insert-btns {
+	border-left: 1px solid #5e5e5e;
 }

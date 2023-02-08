@@ -80,7 +80,7 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 
 			//this checked state is set from csvReadOptions._hasHeader
 			const dataWithIndex = getFirstRowWithIndex()
-	
+
 			if (dataWithIndex === null) {
 				//disable input...
 				const el3 = _getById('has-header') as HTMLInputElement
@@ -88,21 +88,21 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 				headerRowWithIndex = null
 				return
 			}
-	
+
 			if (fromUndo) return
-	
+
 			headerRowWithIndex = dataWithIndex
 			el.checked = true //sync ui in case we get here via autoApplyHasHeader
-	
+
 			hot.updateSettings({
-				fixedRowsTop: 0,
-				fixedColumnsLeft: 0,
+				fixedRowsTop: fixedRowsTop,
+				fixedColumnsLeft: fixedColumnsLeft,
 			}, false)
 
 			let hasAnyChangesBefore = getHasAnyChangesUi()
 
-			hot.alter('remove_row', headerRowWithIndex.physicalIndex);
-	
+			hot.alter('remove_row', headerRowWithIndex.physicalIndex)
+
 			elWrite.checked = true
 			defaultCsvWriteOptions.header = true
 			defaultCsvReadOptions._hasHeader = true
@@ -112,7 +112,7 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 				if (hasAnyChangesBefore === false) {
 					_setHasUnsavedChangesUiIndicator(false)
 				}
-				
+
 				isFirstHasHeaderChangedEvent = false
 			}
 
@@ -126,13 +126,13 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 			hot.render()
 			return
 		}
-	
+
 		if (fromUndo) return
-	
+
 		if (headerRowWithIndex === null) {
 			throw new Error('could not insert header row')
 		}
-	
+
 		let hasAnyChangesBefore = getHasAnyChangesUi()
 
 		hot.alter('insert_row', headerRowWithIndex.physicalIndex)
@@ -140,9 +140,9 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 		const visualCol = hot.toVisualColumn(0)
 		//see https://handsontable.com/docs/6.2.2/Core.html#populateFromArray
 		hot.populateFromArray(visualRow, visualCol, [[...headerRowWithIndex.row]])
-	
+
 		headerRowWithIndex = null
-	
+
 		elWrite.checked = false
 		defaultCsvWriteOptions.header = false
 		defaultCsvReadOptions._hasHeader = false
@@ -157,7 +157,7 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 			if (hasAnyChangesBefore === false) {
 				_setHasUnsavedChangesUiIndicator(false)
 			}
-			
+
 			isFirstHasHeaderChangedEvent = false
 		}
 
@@ -166,11 +166,11 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
 		//@ts-ignore
 		let undoPlugin = hot.undoRedo
 		undoPlugin.clear()
-	
+
 		//we changed headerRowWithIndex / header row so force a re-render so that hot calls defaultColHeaderFunc again
 		hot.render()
 
-	
+
 	}
 
 	if (displayRenderInformation) {
@@ -198,7 +198,7 @@ function _applyHasHeader(displayRenderInformation: boolean, fromUndo = false) {
  */
 function setShouldAutpApplyHasHeader(shouldSet: boolean) {
 
-	if(shouldSet) {
+	if (shouldSet) {
 		shouldApplyHasHeaderAfterRowsAdded = true
 		hasHeaderReadOptionInput.classList.add(`toggle-auto-future`)
 		hasHeaderLabel.title = `Activated automatically, if table has >= 2 rows`
@@ -240,7 +240,7 @@ function tryApplyHasHeader() {
 				setShouldAutpApplyHasHeader(false)
 				return
 			}
-	
+
 			setShouldAutpApplyHasHeader(true)
 			return
 		}
@@ -328,7 +328,7 @@ function setEscapeCharStringWrite() {
 	const el = _getById('escape-char-string-write') as HTMLInputElement
 
 	ensuredSingleCharacterString(el)
-	
+
 	defaultCsvWriteOptions.escapeChar = el.value
 }
 
@@ -339,6 +339,7 @@ function setQuoteAllFieldsWrite() {
 
 /**
  * NOT USED CURRENTLY (ui is hidden)
+ * only in browser version
  */
 function setNewLineWrite() {
 	const el = _getById('newline-select-write') as HTMLInputElement
@@ -393,7 +394,7 @@ function copyPreviewToClipboard() {
 /**
  * renders the hot table again
  */
-function reRenderTable() {
+function reRenderTable(callback?: () => void) {
 
 	if (!hot) return
 
@@ -402,8 +403,51 @@ function reRenderTable() {
 		hot!.render()
 		setTimeout(() => {
 			statusInfo.innerText = ``
+
+			if (callback) {
+				//use another timeout so we clear the status text first
+				setTimeout(() => {
+					callback()
+				})
+			}
+
 		}, 0)
 	})
+}
+
+/**
+ * after resetting data the autoColumnSize plugin is disabled (don't know why)
+ * but this is ok as we want our saved column width on reset {@link allColWidths}
+ * 
+ * but after clicking force resize columns we want to enable it again...
+ */
+function forceResizeColumns() {
+	if (!hot) return
+
+	//note that setting colWidths will disable the auto size column plugin (see Plugin AutoColumnSize.isEnabled)
+	//it is enabled if (!colWidths)
+	let plugin = hot.getPlugin('autoColumnSize')
+
+	let setColSizeFunc = () => {
+		if (!hot) return
+		hot.getSettings().manualColumnResize = false //this prevents setting manual col size?
+		hot.updateSettings({ colWidths: plugin.widths }, false)
+		hot.getSettings().manualColumnResize = true
+		hot.updateSettings({}, false) //change to manualColumnResize is only applied after updating setting?
+		plugin.enablePlugin()
+	}
+
+	if (plugin.widths.length === 0) {
+		plugin.enablePlugin()
+
+		reRenderTable(setColSizeFunc)
+		// hot.render() //this is needed else calculate will not get widths
+		//apparently render sets the column widths in the plugin if it's enabled?
+		// plugin.calculateAllColumnsWidth()
+		return
+	}
+
+	setColSizeFunc()
 }
 
 
@@ -433,7 +477,7 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 
 	//reset header row
 	headerRowWithIndex = null
-	
+
 	// if (data.length > 0) {
 	// 	headerRowWithIndex = getFirstRowWithIndexByData(data)
 	// }
@@ -450,19 +494,20 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 	if (initiallyHideComments && typeof csvReadConfig.comments === 'string') {
 		hiddenPhysicalRowIndices = _getCommentIndices(csvParseResult.data, csvReadConfig)
 	}
-	
-		//enable all find connected stuff
-		//we need to setup this first so we get the events before handsontable... e.g. document keydown
-		findWidgetInstance.setupFind()
 
-		const showColumnHeaderNamesWithLettersLikeExcel = initialConfig?.showColumnHeaderNamesWithLettersLikeExcel ?? false
+	//enable all find connected stuff
+	//we need to setup this first so we get the events before handsontable... e.g. document keydown
+	findWidgetInstance.setupFind()
 
-		let defaultColHeaderFuncBound = defaultColHeaderFunc.bind(this, showColumnHeaderNamesWithLettersLikeExcel)
+	const showColumnHeaderNamesWithLettersLikeExcel = initialConfig?.showColumnHeaderNamesWithLettersLikeExcel ?? false
+
+	let defaultColHeaderFuncBound = defaultColHeaderFunc.bind(this, showColumnHeaderNamesWithLettersLikeExcel)
 
 	isInitialHotRender = true
 
 	hot = new Handsontable(container, {
 		data: csvParseResult.data,
+		readOnly: isReadonlyMode,
 		trimWhitespace: false,
 		rowHeaderWidth: getRowHeaderWidth(csvParseResult.data.length),
 		//false to enable virtual rendering
@@ -470,7 +515,7 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 		rowHeaders: function (row: number) { //the visual row index
 			let text = (row + 1).toString()
 
-			if (csvParseResult.data.length === 1) {
+			if (csvParseResult.data.length === 1 || isReadonlyMode) {
 				return `${text} <span class="remove-row clickable" onclick="removeRow(${row})" style="visibility: hidden"><i class="fas fa-trash"></i></span>`
 			}
 
@@ -488,6 +533,8 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 		currentRowClassName: 'foo', //actually used to overwrite highlighting
 		//plugins
 		comments: false,
+		autoWrapRow: initialConfig?.lastColumnOrFirstColumnNavigationBehavior === 'stop' ? false : true, //seems wrong, but this way around is correct...
+		autoWrapCol: initialConfig?.lastRowOrFirstRowNavigationBehavior === 'stop' ? false : true, //seems wrong, but this way around is correct...
 		search: {
 			queryMethod: customSearchMethod,
 			searchResultClass: 'search-result-cell',
@@ -509,30 +556,40 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 		fixedColumnsLeft: fixedColumnsLeft,
 		//see https://handsontable.com/docs/7.1.0/demo-context-menu.html
 		contextMenu: {
-			callback: function (key: string, ...others) {
-			},
 			items: {
 				'row_above': {
-					callback: function() { //key, selection, clickEvent
+					callback: function () { //key, selection, clickEvent
 						insertRowAbove()
+					},
+					disabled: function () {
+						return isReadonlyMode
 					}
 				},
 				'row_below': {
-					callback: function() { //key, selection, clickEvent
+					callback: function () { //key, selection, clickEvent
 						insertRowBelow()
+					},
+					disabled: function () {
+						return isReadonlyMode
 					}
 				},
 				'---------': {
 					name: '---------'
 				},
 				'col_left': {
-					callback: function() { //key, selection, clickEvent
+					callback: function () { //key, selection, clickEvent
 						insertColLeft()
+					},
+					disabled: function () {
+						return isReadonlyMode
 					}
 				},
 				'col_right': {
-					callback: function() { //key, selection, clickEvent
+					callback: function () { //key, selection, clickEvent
 						insertColRight()
+					},
+					disabled: function () {
+						return isReadonlyMode
 					}
 				},
 				'---------2': {
@@ -540,6 +597,8 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 				},
 				'remove_row': {
 					disabled: function () {
+
+						if (isReadonlyMode) return true
 
 						const selection = hot!.getSelected()
 						let allRowsAreSelected = false
@@ -549,10 +608,12 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 						}
 
 						return hot!.countRows() === 1 || allRowsAreSelected
-					}
+					},
 				},
 				'remove_col': {
 					disabled: function () {
+
+						if (isReadonlyMode) return true
 
 						const selection = hot!.getSelected()
 						let allColsAreSelected = false
@@ -568,9 +629,65 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 					name: '---------'
 				},
 				'alignment': {},
+				'edit_header_cell': {
+					name: 'Edit header cell',
+					hidden: function () {
+						//there is no selection for header cells...
+						let selectedRanges = hot!.getSelected()
+
+						//only one range is selected
+						if (selectedRanges?.length !== 1) return true
+
+						//only one column is selected
+						if (selectedRanges[0][1] !== selectedRanges[0][3]) return true
+
+						//the whole col must be selected then we clicked the header cell
+						let maxRowIndex = hot!.countRows() - 1
+						if (selectedRanges[0][0] !== 0 || selectedRanges[0][2] !== maxRowIndex) return true
+
+						//must have custom header cells
+						if (!defaultCsvReadOptions._hasHeader) return true
+
+						if (!headerRowWithIndex) return true
+
+						return false
+					},
+					callback: function (key: string, selection: Array<{ start: { col: number, row: number }, end: { col: number, row: number } }>, clickEvent: Event) {
+						if (!headerRowWithIndex) return
+						if (selection.length > 1) return
+
+						let targetCol = selection[0].start.col
+
+						showColHeaderNameEditor(targetCol)
+					},
+					disabled: function () {
+						return isReadonlyMode
+					}
+				}
 			}
 		} as ContextMenuSettings,
+		beforeColumnSort: function (currentSortConfig, destinationSortConfigs) {
 
+			//we cannot use the setting columnSorting because this would remove the hidden indicators, this would change the coulmn width...
+			if (isReadonlyMode) return false
+
+			return
+		},
+		afterOnCellMouseUp: function () {
+
+			//we need this because after we click on header edit this event is called and focuses some editor on the hot instance
+			if (editHeaderCellTextInputEl) {
+				setTimeout(() => {
+					editHeaderCellTextInputEl!.focus()
+				}, 0)
+			}
+
+		},
+		afterOnCellMouseDown: function (event, coords, th) {
+			if (coords.row !== -1) return
+
+			lastClickedHeaderCellTh = th
+		},
 		outsideClickDeselects: false, //keep selection
 
 		cells: highlightCsvComments
@@ -640,7 +757,7 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 				}
 			}
 		},
-		afterColumnResize: function() {
+		afterColumnResize: function () {
 			// syncColWidths() //covered by afterRender
 		},
 		afterPaste: function () {
@@ -728,6 +845,60 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 			//we could change data to 1 element array containing the finished data? log to console then step until we get to SheetClip.stringify
 			// console.log('data');
 		},
+		beforeUndo: function (_action: EditHeaderCellAction | RemoveColumnAction | InsertColumnAction | any) {
+
+			let __action = _action as EditHeaderCellAction | RemoveColumnAction | InsertColumnAction
+
+			//when we change has header this is not a prolbem because the undo stack is cleared when we toggle has header
+			if (__action.actionType === 'changeHeaderCell' && headerRowWithIndex) {
+				let action = __action as EditHeaderCellAction
+				let visualColIndex: number = action.change[1]
+				let beforeValue = action.change[2]
+
+				let undoPlugin = (hot as any).undoRedo
+				let undoneStack = undoPlugin.undoneActions as any[]
+				undoneStack.push(action)
+
+				headerRowWithIndex.row[visualColIndex] = beforeValue
+				setTimeout(() => {
+					hot!.render()
+				}, 0)
+				return false
+
+			} else if (__action.actionType === 'remove_col' && headerRowWithIndex) {
+				// let action = __action as RemoveColumnAction
+
+				let lastAction = headerRowWithIndexUndoStack.pop()
+				if (lastAction && lastAction.action === "removed") {
+
+					headerRowWithIndex.row.splice(lastAction.visualIndex, 0, ...lastAction.headerData)
+
+					headerRowWithIndexRedoStack.push({
+						action: 'removed',
+						visualIndex: lastAction.visualIndex,
+						headerData: lastAction.headerData
+					})
+
+				}
+
+			} else if (__action.actionType === 'insert_col' && headerRowWithIndex) {
+				// let action = __action as InsertColumnAction
+
+				let lastAction = headerRowWithIndexUndoStack.pop()
+				if (lastAction && lastAction.action === "added") {
+
+					headerRowWithIndex.row.splice(lastAction.visualIndex, lastAction.headerData.length)
+
+					headerRowWithIndexRedoStack.push({
+						action: 'added',
+						visualIndex: lastAction.visualIndex,
+						headerData: lastAction.headerData
+					})
+
+				}
+			}
+
+		},
 		afterUndo: function (action: any) {
 
 			// console.log(`afterUndo`, action)
@@ -750,9 +921,56 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 			//could remove columns
 			// syncColWidths() //covered by afterRender
 		},
-		beforeRedo: function (action: any) {
+		beforeRedo: function (_action: EditHeaderCellAction | RemoveColumnAction | InsertColumnAction | any) {
 
-			// console.log(`beforeRedo`, action)
+			let __action = _action as EditHeaderCellAction | RemoveColumnAction | InsertColumnAction
+
+			//when we change has header this is not a prolbem because the undo stack is cleared when we toggle has header
+			if (__action.actionType === 'changeHeaderCell' && headerRowWithIndex) {
+
+				let action = __action as EditHeaderCellAction
+				let visualColIndex: number = action.change[1]
+				let afterValue = action.change[3]
+
+				let undoPlugin = (hot as any).undoRedo
+				let doneStack = undoPlugin.doneActions as any[]
+				doneStack.push(action)
+
+				headerRowWithIndex.row[visualColIndex] = afterValue
+				setTimeout(() => {
+					hot!.render()
+				}, 0)
+				return false
+
+			} else if (__action.actionType === 'remove_col' && headerRowWithIndex) {
+				// let action = __action as RemoveColumnAction
+
+				let lastAction = headerRowWithIndexRedoStack.pop()
+				if (lastAction && lastAction.action === "removed") {
+
+					headerRowWithIndex.row.splice(lastAction.visualIndex, lastAction.headerData.length)
+
+					headerRowWithIndexUndoStack.push({
+						action: 'removed',
+						visualIndex: lastAction.visualIndex,
+						headerData: lastAction.headerData
+					})
+				}
+			} else if (__action.actionType === 'insert_col' && headerRowWithIndex) {
+
+				let lastAction = headerRowWithIndexRedoStack.pop()
+				if (lastAction && lastAction.action === "added") {
+
+					headerRowWithIndex.row.splice(lastAction.visualIndex, 0, ...lastAction.headerData)
+
+					headerRowWithIndexUndoStack.push({
+						action: 'added',
+						visualIndex: lastAction.visualIndex,
+						headerData: lastAction.headerData
+					})
+				}
+
+			}
 
 			// if (headerRowWithIndex && action.actionType === 'remove_row' && action.index === headerRowWithIndex.physicalIndex) { //first row cannot be removed normally so it must be the header row option
 			// 	//we re insert header row
@@ -769,14 +987,16 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 		/**
 		 * isForced: Is true if rendering was triggered by a change of settings or data; or 
 		 * false if rendering was triggered by scrolling or moving selection.
+		 * 
+		 * WE now do this in an additional hook
 		 */
-		afterRender: function(isForced: boolean) {
-			if (!isForced || isInitialHotRender) return
-			//e.g. when we edit a cell and the cell must adjust the width because of the content
-			//there is no other hook?
-			//this is also fired on various other event (e.g. col resize...) but better sync more than miss an event
-			syncColWidths()
-		},
+		// afterRender: function (isForced: boolean) {
+		// 	if (!isForced || isInitialHotRender) return
+		// 	//e.g. when we edit a cell and the cell must adjust the width because of the content
+		// 	//there is no other hook?
+		// 	//this is also fired on various other event (e.g. col resize...) but better sync more than miss an event
+		// 	syncColWidths()
+		// },
 		/**
 		 * this is an array if we e.g. move consecutive columns (2,3)
 		 *   but maybe there is a way... this func should handle this anyway
@@ -786,39 +1006,46 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 
 			if (!hot) throw new Error('table was null')
 
-			//TODO NOT WORKING??
+			//DO not update settings while we are in some hooks!
+			//else the index mapping might get corrupted
 			// hot.updateSettings({
 			// 	colHeaders: defaultColHeaderFunc as any
 			// }, false)
+
+			//clear all undo redo because handsontable do not undo the col moves but the edits... which leads to wrong data!
+			headerRowWithIndexUndoStack.splice(0)
+			headerRowWithIndexRedoStack.splice(0)
+			let undoPlugin = (hot as any).undoRedo
+			undoPlugin.clear()
 
 			//dirty copy of below!!!
 			if (headerRowWithIndex !== null) {
 				//same as in columnIsQuoted... see below for docs
 				let temp = headerRowWithIndex
 
-					const headerRowTexts: (string | null)[] = startColVisualIndices.map(p => temp.row[p]) //for some reason we need tmp here else can be null??
+				const headerRowTexts: (string | null)[] = startColVisualIndices.map(p => temp.row[p]) //for some reason we need tmp here else can be null??
 
-					let headerRowCopy: Array<string | null> = []
+				let headerRowCopy: Array<string | null> = []
 
-					for (let i = 0; i <= headerRowWithIndex.row.length; i++) {
-						const colText = i < headerRowWithIndex.row.length ? headerRowWithIndex.row[i] : null;
-	
-						let startIndex = startColVisualIndices.indexOf(i)
-	
-						if (startIndex !== -1) {
-							continue
-						}
-	
-						if (i === endColVisualIndex) {
-							headerRowCopy.push(...headerRowTexts)
-						}
-	
-						if (i >= headerRowWithIndex.row.length) continue
-	
-						headerRowCopy.push(colText)
+				for (let i = 0; i <= headerRowWithIndex.row.length; i++) {
+					const colText = i < headerRowWithIndex.row.length ? headerRowWithIndex.row[i] : null;
+
+					let startIndex = startColVisualIndices.indexOf(i)
+
+					if (startIndex !== -1) {
+						continue
 					}
-	
-					headerRowWithIndex.row = headerRowCopy
+
+					if (i === endColVisualIndex) {
+						headerRowCopy.push(...headerRowTexts)
+					}
+
+					if (i >= headerRowWithIndex.row.length) continue
+
+					headerRowCopy.push(colText)
+				}
+
+				headerRowWithIndex.row = headerRowCopy
 			}
 
 			if (columnIsQuoted) {
@@ -862,7 +1089,7 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 			// syncColWidths() //covered by afterRender
 			onAnyChange()
 		} as any),
-		afterRowMove: function(startRow: number, endRow: number) {
+		afterRowMove: function (startRow: number, endRow: number) {
 			if (!hot) throw new Error('table was null')
 			onAnyChange()
 		},
@@ -890,61 +1117,49 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 				}
 			}
 		},
-		afterCreateCol: function (visualColIndex, amount) {
+		afterCreateCol: function (visualColIndex, amount, source?: string) {
 
 			if (!hot) return
 
 			if (headerRowWithIndex) {
-				const physicalIndex = hot.toPhysicalColumn(visualColIndex)
+				// const physicalIndex = hot.toPhysicalColumn(visualColIndex)
 
-				headerRowWithIndex.row.splice(physicalIndex, 0, ...Array(amount).fill(null))
-				//hot automatically re-renders after this
+				if (source !== `UndoRedo.undo` && source !== `UndoRedo.redo`) { //undo redo is already handled
+					headerRowWithIndexUndoStack.push({
+						action: 'added',
+						visualIndex: visualColIndex,
+						headerData: [...Array(amount).fill(null)],
+					})
+
+					headerRowWithIndex.row.splice(visualColIndex, 0, ...Array(amount).fill(null))
+				}
 			}
 
 			if (columnIsQuoted) {
-				const physicalIndex = hot.toPhysicalColumn(visualColIndex)
-				columnIsQuoted.splice(physicalIndex, 0, ...Array(amount).fill(newColumnQuoteInformationIsQuoted))
+				// const physicalIndex = hot.toPhysicalColumn(visualColIndex)
+				columnIsQuoted.splice(visualColIndex, 0, ...Array(amount).fill(newColumnQuoteInformationIsQuoted))
 			}
 
 			// syncColWidths() //covered by afterRender
 			onAnyChange()
-			updateFixedRowsCols()
+			//dont' call this as it corrupts hot index mappings (because all other hooks need to finish first before we update hot settings)
+			//also it's not needed as handsontable already handles this internally
+			// updateFixedRowsCols()
 		},
-		afterRemoveCol: function (visualColIndex, amount) {
+		afterRemoveCol: function (visualColIndex, amount, someting?: any, source?: string) {
 
-			if (!hot) return
-
-			if (headerRowWithIndex) {
-				const physicalIndex = hot.toPhysicalColumn(visualColIndex)
-				headerRowWithIndex.row.splice(physicalIndex, amount)
-				//hot automatically re-renders after this
+			let isFromUndoRedo = (source === `UndoRedo.undo` || source === `UndoRedo.redo`)
+			if (headerRowWithIndex && !isFromUndoRedo) { //undo redo is already handled
+				headerRowWithIndexUndoStack.push({
+					action: 'removed',
+					visualIndex: visualColIndex,
+					headerData: [headerRowWithIndex.row[visualColIndex]]
+				})
 			}
 
-			const sortConfigs = hot.getPlugin('columnSorting').getSortConfig()
-
-			const sortedColumnIds = sortConfigs.map(p => hot!.toPhysicalColumn(p.column))
-
-			let removedColIds: number[] = []
-			for (let i = 0; i < amount; i++) {
-				removedColIds.push(hot.toPhysicalColumn(visualColIndex + i))
-			}
-
-			//if we removed some col that was sorted then clear sorting...
-			if (sortedColumnIds.some(p => removedColIds.includes(p))) {
-				hot.getPlugin('columnSorting').clearSort()
-			}
-
-			if (columnIsQuoted) {
-				const physicalIndex = hot.toPhysicalColumn(visualColIndex)
-				columnIsQuoted.splice(physicalIndex, amount)
-			}
-
-			allColWidths.splice(visualColIndex, 1)
-			applyColWidths()
-
-			// syncColWidths() //covered by afterRender
-			onAnyChange()
-			updateFixedRowsCols()
+			//added below
+			//critical because we could update hot settings here
+			pre_afterRemoveCol(visualColIndex, amount, isFromUndoRedo)
 		},
 		//inspired by https://github.com/handsontable/handsontable/blob/master/src/plugins/hiddenRows/hiddenRows.js
 		//i absolutely don't understand how handsontable implementation is working... 
@@ -953,18 +1168,13 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 		//and then they increment the physical row via the amount
 		//however, it works somehow...
 		afterCreateRow: function (visualRowIndex, amount) {
-			//we need to modify some or all hiddenPhysicalRowIndices...
+			//added below
+			//critical because we could update hot settings here
+			pre_afterCreateRow(visualRowIndex, amount)
 
-			for (let i = 0; i < hiddenPhysicalRowIndices.length; i++) {
-				const hiddenPhysicalRowIndex = hiddenPhysicalRowIndices[i];
-
-				if (hiddenPhysicalRowIndex >= visualRowIndex) {
-					hiddenPhysicalRowIndices[i] += amount
-				}
-			}
-			onAnyChange()
-			updateFixedRowsCols()
-			checkAutoApplyHasHeader()
+			//don't do this as we are inside a hook and the next listerners will change the indices and when we call
+			//hot.updateSettings (inside this func) the plugin internal states are changed and the indices/mappings are corrupted
+			// updateFixedRowsCols()
 		},
 		afterRemoveRow: function (visualRowIndex, amount) {
 			//we need to modify some or all hiddenPhysicalRowIndices...
@@ -989,7 +1199,9 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 			}
 
 			onAnyChange()
-			updateFixedRowsCols()
+			//dont' call this as it corrupts hot index mappings (because all other hooks need to finish first before we update hot settings)
+			//also it's not needed as handsontable already handles this internally
+			// updateFixedRowsCols()
 		},
 		//called when we select a row via row header
 		beforeSetRangeStartOnly: function (coords) {
@@ -1026,6 +1238,7 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 				}
 			}
 
+			//maybe refactor to iterative?
 			const getNextRow: (a: number) => number = (visualRowIndex: number) => {
 
 				let visualRow = visualRowIndex;
@@ -1092,7 +1305,19 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 		} as any,
 
 		beforeKeyDown: function (event: KeyboardEvent) {
-			
+
+			//we need this because when editing header cell the hot instance thinks some editor is active and would pass the inputs to the next cell...
+			if (editHeaderCellTextInputEl) {
+				event.stopImmediatePropagation()
+				return
+			}
+
+			if ((event.ctrlKey || event.metaKey) && event.key === 'a' && findWidgetInstance.isFindWidgetDisplayed()) {
+				event.stopImmediatePropagation()
+				findWidgetInstance.selectAllInputText()
+				return
+			}
+
 			//NOTE that this can prevent all vs code shortcuts... e.g. cmd+p (on mac)!!!
 			if (event.ctrlKey && event.shiftKey && event.altKey && event.key === 'ArrowDown') {
 				event.stopImmediatePropagation()
@@ -1116,6 +1341,12 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 	Handsontable.dom.addEvent(window as any, 'resize', throttle(onResizeGrid, 200))
 
 	if (typeof afterHandsontableCreated !== 'undefined') afterHandsontableCreated(hot)
+
+	hot.addHook('afterRender', afterRenderForced as any)
+
+	hot.getPlugin('copyPaste').rowsLimit = copyPasteRowLimit
+	hot.getPlugin('copyPaste').columnsLimit = copyPasteColLimit
+	hot.getPlugin('copyPaste').pasteSeparatorMode = initialConfig?.pasteMode || 'normal'
 
 	const oldShouldApplyHeaderReadOption = defaultCsvReadOptions._hasHeader
 	const settingsApplied = checkIfHasHeaderReadOptionIsAvailable(true)
@@ -1148,9 +1379,47 @@ function displayData(this: any, csvParseResult: ExtendedCsvParseResult | null, c
 	//because main.ts is loaded before this the first init must be manually...
 	afterHandsontableCreated(hot!)
 
+	setupScrollListeners()
+
 	if (hot) {
-		//select first cell by default so we have always a context
-		hot.selectCell(0, 0)
+
+		if (previousSelectedCell === null || previousViewportOffsets === null) {
+			//the whole set select cell takes for 100k rows ~1.5s
+			// console.time('setSelectedCell')
+			//select first cell by default so we have always a context
+			let cellToSelect: HotCellPos = {
+				rowIndex: 0,
+				colIndex: 0,
+			}
+
+			if (csvParseResult) {
+				cellToSelect = calcHotCellToSelectFromCurosPos(
+					initialVars.openTableAndSelectCellAtCursorPos,
+					initialVars.sourceFileCursorLineIndex,
+					initialVars.sourceFileCursorColumnIndex,
+					initialVars.isCursorPosAfterLastColumn,
+					csvParseResult,
+					csvReadConfig
+				)
+			} else {
+				cellToSelect = {
+					rowIndex: 0,
+					colIndex: 0
+				}
+			}
+
+			//this will select the cell and scroll the viewport to show the cell
+			//at the bottom and on the right side
+			hot.selectCell(cellToSelect.rowIndex, cellToSelect.colIndex) //this takes to most time... 100k ~1.3s
+			scrollToSelectedCell(hot, cellToSelect)  //even for 100k file and worst path (where we need to split the file at \n, only ~150ms)
+
+			// console.timeEnd('setSelectedCell')
+
+		} else {
+			//user moved the cell selection manually, so not reset selection
+			hot.selectCell(previousSelectedCell.rowIndex, previousSelectedCell.colIndex)
+			setHotScrollPosition(hot, previousViewportOffsets)
+		}
 	}
 }
 
@@ -1174,7 +1443,7 @@ function onAnyChange(changes?: CellChanges[] | null, reason?: string) {
 		if (!hasChanges) return
 	}
 
-	
+
 	//we need to check the value cache because the user could have cleared the input and then closed the widget
 	//but if we have an old search we re-open the old search which is now invalid...
 	if (findWidgetInstance.findWidgetInputValueCache !== '') {
@@ -1229,6 +1498,16 @@ function applyColWidths() {
 	// console.log(`col widths applies`, allColWidths)
 	//snatched from https://github.com/YaroslavOvdii/fliplet-widget-data-source/blob/master/js/spreadsheet.js
 	hot.getSettings().manualColumnResize = false
+	let autoSizedWidths = _getColWidths()
+
+	//maybe the user removed columns so we don't have all widths... e.g. remove cols then reset data...
+	//we keep the col widths we have and add the auto size ones for the columns where we don't have old sizes...
+	//NOTE we don't store the column names so we probably apply the wrong size to the wrong columns, e.g. 2 cols, reset 5 columns -> first 2 columns will get the old size of the old 2 columns
+	for (let i = allColWidths.length; i < autoSizedWidths.length; i++) {
+		const colWidth = autoSizedWidths[i]
+		allColWidths.push(colWidth)
+	}
+
 	//note that setting colWidths will disable the auto size column plugin (see Plugin AutoColumnSize.isEnabled)
 	//it is enabled if (!colWidths)
 	hot.updateSettings({ colWidths: allColWidths }, false)
@@ -1242,13 +1521,13 @@ function applyColWidths() {
 function syncColWidths() {
 	allColWidths = _getColWidths()
 	// console.log('col widths synced', allColWidths);
-	
+
 }
 
-function _getColWidths() {
-	if (!hot) return
+function _getColWidths(): number[] {
+	if (!hot) return []
 	//@ts-ignore
-	return hot.getColHeader().map(function(header, index) {
+	return hot.getColHeader().map(function (header, index) {
 		return hot!.getColWidth(index)
 	})
 }
@@ -1288,19 +1567,18 @@ function defaultColHeaderFunc(useLettersAsColumnNames: boolean, colIndex: number
 
 	let visualIndex = colIndex
 
-	if (hot) {
-		visualIndex = hot.toVisualColumn(colIndex)
+	if (!hot) return ``
+	// if (!hot) {
+	// 	return `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})" style="visibility: hidden"><i class="fas fa-trash"></i></span>`
+	// }
 
-		if (hot.countCols() === 1) {
-			return `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})" style="visibility: hidden"><i class="fas fa-trash"></i></span>`
-		}
+	visualIndex = hot.toVisualColumn(colIndex)
 
-		return `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})"><i class="fas fa-trash"></i></span>`
+	if (hot.countCols() === 1 || isReadonlyMode) {
+		return `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})" style="visibility: hidden"><i class="fas fa-trash"></i></span>`
 	}
 
-	return visualIndex !== 0
-		? `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})"><i class="fas fa-trash"></i></span>`
-		: `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})" style="visibility: hidden"><i class="fas fa-trash"></i></span>`
+	return `${text} <span class="remove-col clickable" onclick="removeColumn(${visualIndex})"><i class="fas fa-trash"></i></span>`
 }
 
 /**
@@ -1365,6 +1643,7 @@ function toggleSourceFileChangedModalDiv(isVisible: boolean) {
  * @param {string} content 
  */
 function resetData(content: string, csvReadOptions: CsvReadOptions) {
+
 	const _data = parseCsv(content, csvReadOptions)
 	// console.log(`_data`, _data)
 	displayData(_data, csvReadOptions)
@@ -1383,6 +1662,7 @@ function resetDataFromResetDialog() {
 
 	postSetEditorHasChanges(false)
 
+	storeHotSelectedCellAndScrollPosition()
 	startRenderData()
 }
 
@@ -1391,7 +1671,7 @@ function resetDataFromResetDialog() {
  * if all changes are written to the file we can proceed without displaying a dialog
  */
 function preReloadFileFromDisk() {
-	
+
 
 	const hasAnyChanges = getHasAnyChangesUi()
 
@@ -1410,6 +1690,8 @@ function reloadFileFromDisk() {
 	toggleAskReloadFileModalDiv(false)
 	toggleSourceFileChangedModalDiv(false)
 	_setHasUnsavedChangesUiIndicator(false)
+
+	storeHotSelectedCellAndScrollPosition()
 	postReloadFile()
 }
 
@@ -1433,6 +1715,9 @@ function stopReceiveCsvProgBar() {
  * @param saveSourceFile 
  */
 function postApplyContent(saveSourceFile: boolean) {
+
+	if (isReadonlyMode) return
+
 	const csvContent = getDataAsCsv(defaultCsvReadOptions, defaultCsvWriteOptions)
 
 	//used to clear focus... else styles are not properly applied
@@ -1530,12 +1815,12 @@ function showOrHideAllComments(show: boolean) {
 
 	if (show) {
 		showCommentsBtn.style.display = 'none'
-		hideCommentsBtn.style.display = 'initial'
+		hideCommentsBtn.style.display = ''
 
 		hiddenPhysicalRowIndices = []
 	}
 	else {
-		showCommentsBtn.style.display = 'initial'
+		showCommentsBtn.style.display = ''
 		hideCommentsBtn.style.display = 'none'
 
 		if (hot) {
@@ -1595,6 +1880,9 @@ function changeFontSizeInPx(fontSizeInPx: number) {
 
 /**
  * applies the fixed rows and cols settings (normally called after a row/col added/removed)
+ * ONLY call this if all other hot hooks have run else the data gets out of sync
+ *   this is because the manualRowMove (and other) plugins update index mappings and when we call
+ *   updateSettings during that the plugins get disabled and enabled and the data gets out of sync (the mapping)
  * ONLY if the {@link defaultCsvReadOptions._hasHeader} is false
  */
 function updateFixedRowsCols() {
@@ -1611,13 +1899,13 @@ function updateFixedRowsCols() {
  * increments the {@link fixedRowsTop} by 1
  */
 function incFixedRowsTop() {
-	_changeFixedRowsTop(fixedRowsTop+1)
+	_changeFixedRowsTop(fixedRowsTop + 1)
 }
 /**
  * decrements the {@link fixedRowsTop} by 1
  */
 function decFixedRowsTop() {
-	_changeFixedRowsTop(fixedRowsTop-1)
+	_changeFixedRowsTop(fixedRowsTop - 1)
 }
 /**
  * no use this directly in the ui as {@link fixedRowsTop} name could change
@@ -1644,13 +1932,13 @@ function _toggleFixedRowsText() {
  * increments the {@link fixedColumnsLeft} by 1
  */
 function incFixedColsLeft() {
-	_changeFixedColsLeft(fixedColumnsLeft+1)
+	_changeFixedColsLeft(fixedColumnsLeft + 1)
 }
 /**
  * decrements the {@link fixedColumnsLeft} by 1
  */
 function decFixedColsLeft() {
-	_changeFixedColsLeft(fixedColumnsLeft-1)
+	_changeFixedColsLeft(fixedColumnsLeft - 1)
 }
 /**
  * no use this directly in the ui as {@link fixedColumnsLeft} name could change
@@ -1686,9 +1974,9 @@ function setupSideBarResizeHandle() {
 
 	sideBarResizeHandle.addEventListener(`mousedown`, (e) => {
 		downX = e.clientX
-		 _style = window.getComputedStyle(sidePanel)
-		 downWidth = parseInt(_style.width.substring(0,_style.width.length-2))
-		 if (isNaN(downWidth)) downWidth = minSidebarWidthInPx
+		_style = window.getComputedStyle(sidePanel)
+		downWidth = parseInt(_style.width.substring(0, _style.width.length - 2))
+		if (isNaN(downWidth)) downWidth = minSidebarWidthInPx
 	})
 
 
@@ -1721,6 +2009,34 @@ function setupSideBarResizeHandle() {
 		downX = null
 	})
 
+}
+
+function getHandsontableOverlayScrollLeft(): HTMLDivElement | null {
+	const overlayWrapper = document.querySelector(`#csv-editor-wrapper .ht_master .wtHolder`)
+
+	if (!overlayWrapper) {
+		console.warn(`could not find handsontable overlay wrapper`)
+		return null
+	}
+	return overlayWrapper as HTMLDivElement
+}
+
+function setupScrollListeners() {
+
+	let overlayWrapper = getHandsontableOverlayScrollLeft()!
+
+	if (_onTableScrollThrottled) {
+		overlayWrapper.removeEventListener(`scroll`, _onTableScrollThrottled)
+	}
+	_onTableScrollThrottled = throttle(_onTableScroll, 100)
+	overlayWrapper.addEventListener(`scroll`, _onTableScrollThrottled)
+}
+
+function _onTableScroll(e: Event) {
+
+	if (!editHeaderCellTextInputEl) return
+	let scrollLeft = (e.target as HTMLElement).scrollLeft
+	editHeaderCellTextInputEl.style.left = `${editHeaderCellTextInputLeftOffsetInPx - (scrollLeft - handsontableOverlayScrollLeft)}px`
 }
 
 /**
@@ -1770,4 +2086,285 @@ function toggleSidePanel(shouldCollapse?: boolean) {
 		recalculateStats()
 	}
 
+}
+
+// ------------------------------------------------------
+
+/*maybe this is not needed but it can be dangerous to call hot.updateSettings while indices/mappings are updated
+ e.g. when we call {@link updateFixedRowsCols} during afterCreateRow and
+	 move row 5 below row 1 then try to add a row below row 1 it is added 2 rows below and row 5 is at is't ols position...
+
+so we only store the events we get and call them after a rerender (which is hopefully are called last)
+*/
+
+type RecordedHookAction = 'afterRemoveCol' | 'afterCreateRow'
+
+let recordedHookActions: RecordedHookAction[]
+
+type HookItem = {
+	actionName: RecordedHookAction
+	action: Function
+}
+
+let hook_list: HookItem[] = []
+
+function afterRenderForced(isForced: boolean) {
+	if (!isForced) {
+		hook_list = []
+		recordedHookActions = []
+		return
+	}
+
+	//hot.alter forced a rerender
+	//and we can only run our hooks after hot has updated internal mappings and indices
+	//so we kepp track if our hooks were fired and execute them after the rerender
+
+	for (let i = 0; i < hook_list.length; i++) {
+		const hookItem = hook_list[i];
+
+		if (!recordedHookActions.includes(hookItem.actionName)) continue
+
+		//prevent infinite loop if we render in action
+		hook_list.splice(i, 1)
+		hookItem.action()
+	}
+	hook_list = []
+	recordedHookActions = []
+
+	if (!isForced || isInitialHotRender) return
+	//e.g. when we edit a cell and the cell must adjust the width because of the content
+	//there is no other hook?
+	//this is also fired on various other event (e.g. col resize...) but better sync more than miss an event
+	syncColWidths()
+}
+
+function pre_afterRemoveCol(this: any, visualColIndex: number, amount: number, isFromUndoRedo: boolean) {
+	recordedHookActions.push("afterRemoveCol")
+
+	hook_list.push({
+		actionName: 'afterRemoveCol',
+		action: afterRemoveCol.bind(this, visualColIndex, amount, isFromUndoRedo)
+	})
+}
+
+function afterRemoveCol(visualColIndex: number, amount: number, isFromUndoRedo: boolean) {
+	if (!hot) return
+
+	if (headerRowWithIndex && !isFromUndoRedo) {
+		headerRowWithIndex.row.splice(visualColIndex, amount)
+		//hot automatically re-renders after this
+	}
+
+	const sortConfigs = hot.getPlugin('columnSorting').getSortConfig()
+
+	const sortedColumnIds = sortConfigs.map(p => hot!.toPhysicalColumn(p.column))
+
+	let removedColIds: number[] = []
+	for (let i = 0; i < amount; i++) {
+		removedColIds.push(hot.toPhysicalColumn(visualColIndex + i))
+	}
+
+	//if we removed some col that was sorted then clear sorting...
+	if (sortedColumnIds.some(p => removedColIds.includes(p))) {
+		hot.getPlugin('columnSorting').clearSort()
+	}
+
+	if (columnIsQuoted) {
+		// const physicalIndex = hot.toPhysicalColumn(visualColIndex)
+		columnIsQuoted.splice(visualColIndex, amount)
+	}
+
+	allColWidths.splice(visualColIndex, 1)
+	//critical might update settings
+	applyColWidths()
+
+	// syncColWidths() //covered by afterRender
+	onAnyChange()
+	//dont' call this as it corrupts hot index mappings (because all other hooks need to finish first before we update hot settings)
+	//also it's not needed as handsontable already handles this internally
+	// updateFixedRowsCols()
+}
+
+function pre_afterCreateRow(this: any, visualRowIndex: number, amount: number) {
+	recordedHookActions.push("afterCreateRow")
+
+	hook_list.push({
+		actionName: 'afterCreateRow',
+		action: afterCreateRow.bind(this, visualRowIndex, amount)
+	})
+}
+
+//inspired by https://github.com/handsontable/handsontable/blob/master/src/plugins/hiddenRows/hiddenRows.js
+//i absolutely don't understand how handsontable implementation is working... 
+//their this.hiddenRows should be physical indices (see https://github.com/handsontable/handsontable/blob/master/src/plugins/hiddenRows/hiddenRows.js#L254)
+//but in onAfterCreateRow & onAfterRemoveRow they check against `visualRow` which is actually the physical row (see above)
+//and then they increment the physical row via the amount
+//however, it works somehow...
+function afterCreateRow(visualRowIndex: number, amount: number) {
+	//added below
+	//critical because we could update hot settings here
+	//we need to modify some or all hiddenPhysicalRowIndices...
+
+	for (let i = 0; i < hiddenPhysicalRowIndices.length; i++) {
+		const hiddenPhysicalRowIndex = hiddenPhysicalRowIndices[i];
+
+		if (hiddenPhysicalRowIndex >= visualRowIndex) {
+			hiddenPhysicalRowIndices[i] += amount
+		}
+	}
+	onAnyChange()
+	//dont' call this as it corrupts hot index mappings (because all other hooks need to finish first before we update hot settings)
+	//also it's not needed as handsontable already handles this internally
+	// updateFixedRowsCols()
+
+	checkAutoApplyHasHeader()
+}
+
+function showColHeaderNameEditor(visualColIndex: number) {
+
+	if (!headerRowWithIndex) return
+	if (!lastClickedHeaderCellTh) return
+
+	//see https://stackoverflow.com/questions/18348437/how-do-i-edit-the-header-text-of-a-handsontable
+	//update hot
+	//col resizing? ok because input loses focus
+	//long render indicators are not really necessary at this point because 100k row files only takes 1-2s
+	//does work with virtual indices (e.g. when we reordered the columns)
+
+	let rect = lastClickedHeaderCellTh.getBoundingClientRect()
+
+	let input = document.createElement(`input`)
+	input.setAttribute(`type`, `text`)
+	input.style.position = `absolute`
+	input.style.left = `${rect.left}px`
+	editHeaderCellTextInputLeftOffsetInPx = rect.left
+	input.style.top = `${rect.top}px`
+	input.style.width = `${rect.width}px`
+	input.style.height = `${rect.height}px`
+	input.style.zIndex = `1000`
+
+	input.value = headerRowWithIndex.row[visualColIndex] ?? ''
+	editHeaderCellTextInputEl = input
+
+	let overlayWrapper = getHandsontableOverlayScrollLeft()!
+	handsontableOverlayScrollLeft = overlayWrapper.scrollLeft
+
+	let inputWasRemoved = false
+	const removeInput = () => {
+		editHeaderCellTextInputEl = null
+		//this also calls blur
+		if (inputWasRemoved) return
+		inputWasRemoved = true
+		input.remove()
+	}
+
+	//blur -> commit
+	//esc -> revert
+
+	const beforeValue = input.value
+	//set to false initially e.g. when we focus some other window we don't want to apply changes
+	let shouldApplyChanges = true
+
+	let applyChange = () => {
+		shouldApplyChanges = false
+		if (headerRowWithIndex && beforeValue !== input.value) {
+			headerRowWithIndex.row[visualColIndex] = input.value
+
+			let undoPlugin = (hot as any).undoRedo
+			let doneStack = undoPlugin.doneActions as any[]
+			let editHeaderRow: EditHeaderCellAction = {
+				actionType: 'changeHeaderCell',
+				change: [0, visualColIndex, beforeValue, input.value]
+			}
+			doneStack.push(editHeaderRow)
+
+			//TODO show indicator?
+			hot!.render()
+		}
+	}
+
+	let addListeners = () => {
+
+		input.addEventListener(`blur`, () => {
+			if (shouldApplyChanges) {
+				applyChange()
+			}
+			removeInput()
+		})
+
+		input.addEventListener(`keyup`, (e) => {
+
+			if (e.key.toLocaleLowerCase() === `escape`) {
+				shouldApplyChanges = false
+				removeInput()
+			}
+
+			if (e.key.toLocaleLowerCase() === `enter`) {
+				shouldApplyChanges = true
+				applyChange()
+				removeInput()
+			}
+		})
+	}
+
+
+	document.body.appendChild(input)
+
+	setTimeout(() => {
+		addListeners()
+		// input.select()
+	})
+
+}
+
+
+function _updateToggleReadonlyModeUi() {
+
+	//new state is isReadonlyMode
+	if (isReadonlyMode) {
+		isReadonlyModeToggleSpan.classList.add(`active`)
+		isReadonlyModeToggleSpan.title = `Sets the table to edit mode`
+
+		//disable edit ui
+		const btnEditableUi = document.querySelectorAll(`.on-readonly-disable-btn`)
+		for (let i = 0; i < btnEditableUi.length; i++) {
+			btnEditableUi.item(i).setAttribute('disabled', 'true')
+		}
+
+		const divEditableUi = document.querySelectorAll(`.on-readonly-disable-div`)
+		for (let i = 0; i < divEditableUi.length; i++) {
+			divEditableUi.item(i).classList.add('div-readonly-disabled')
+		}
+
+	} else {
+		isReadonlyModeToggleSpan.classList.remove(`active`)
+		isReadonlyModeToggleSpan.title = `Sets the table to readonly mode`
+
+		//enable edit ui
+		const btnEditableUi = document.querySelectorAll(`.on-readonly-disable-btn`)
+		for (let i = 0; i < btnEditableUi.length; i++) {
+			btnEditableUi.item(i).removeAttribute('disabled')
+		}
+
+		const divEditableUi = document.querySelectorAll(`.on-readonly-disable-div`)
+		for (let i = 0; i < divEditableUi.length; i++) {
+			divEditableUi.item(i).classList.remove('div-readonly-disabled')
+		}
+	}
+}
+
+function toggleReadonlyMode() {
+
+	if (!hot) return
+
+	isReadonlyMode = !isReadonlyMode
+
+	hot.updateSettings({
+		readOnly: isReadonlyMode,
+		manualRowMove: !isReadonlyMode,
+		manualColumnMove: !isReadonlyMode,
+		undo: !isReadonlyMode
+	}, false)
+
+	_updateToggleReadonlyModeUi()
 }

@@ -8,12 +8,42 @@ type InitialVars = {
 	 * false: not (e.g. file is not in the workspace or something other)
 	 */
 	isWatchingSourceFile: boolean
+	/**
+	 * the cursor line position in the source file (if set we want to pre select this line in the table)
+	 */
+	sourceFileCursorLineIndex: number | null
+	/**
+	 * the cursor column position in the source file (if set we want to pre select this column in the table)
+	 * clamped to line length - 1
+	 * 
+	 * for this we actually need {@link sourceFileCursorLineIndex} because we might have a multi text line csv row (we need to add the lengths)
+	 */
+	sourceFileCursorColumnIndex: number | null
+
+	/**
+	 * true: cursor is after the last column pos (not a real string index)
+	 */
+	isCursorPosAfterLastColumn: boolean
+
+
+	/**
+	 * if the table should be opened at the cursor position and select the corresponding csv cell
+	 */
+	openTableAndSelectCellAtCursorPos: EditCsvConfig['openTableAndSelectCellAtCursorPos']
+}
+
+/**
+ * type used for overwriting the configuration/settings
+ * if we supply the setting, we need to have the right type
+ */
+type EditCsvConfigOverwrite = {
+	[key in keyof Omit<EditCsvConfig, 'hideOpenCsvEditorUiActions'>]?: Omit<EditCsvConfig, 'hideOpenCsvEditorUiActions'>[key]
 }
 
 /**
  * the settings for the plugin
  */
-type CsvEditSettings = {
+type EditCsvConfig = {
 
 	/**
 	 * * true: the cell/row color is changed if the first cell is a comment, (might have negative impact on performance e.g. for large data sets), false: no additional highlighting (comments are still treated as comments)
@@ -35,6 +65,21 @@ type CsvEditSettings = {
 	 * createColumn: create a new column
 	 */
 	lastColumnTabBehavior: 'default' | 'createColumn'
+
+	/**
+	 * if a cell in the last row (or first) is selected and one presses arrow down or (enter in cell editor), what should happen?
+	 * 
+	 * wrap: the next cell in the first row (or last) should be selected (wrap)
+	 * stop: the selection should stay the same (stop)
+	 */
+	lastRowOrFirstRowNavigationBehavior: 'wrap' | 'stop'
+
+	/**
+	 * if a cell in the last column (or first) is selected and one presses arrow right or tab, what should happen?
+	 * wrap: the first cell in the next row should be selected (wrap)
+	 * stop: the selection should stay the same (stop)
+	 */
+	lastColumnOrFirstColumnNavigationBehavior: 'wrap' | 'stop'
 
 	/**
 	 * the appearance of the (top) option bar
@@ -159,7 +204,7 @@ type CsvEditSettings = {
 	 * true: borders are set to 0 (in css). This helps if you encounter some border color issues, false: normal borders
 	 */
 	disableBorders: boolean
-	
+
 	/**
 	 * the first X rows are pinned so they will stay in view even if you scroll. This option and readOption_hasHeader are mutually exclusive
 	 */
@@ -213,6 +258,48 @@ type CsvEditSettings = {
 	 */
 	insertColBehavior: 'keepRowFocusNewColumn' | 'keepRowKeepColumn'
 
+	/**
+	 * table should start in readonly mode?
+	 * true: table is view only,
+	 * false: edit mode (normal)
+	 * NOTE that initial fixes (e.g. all rows should have the same length) are applied because readonly is only applied after/during the table is created
+	 */
+	initiallyIsInReadonlyMode: boolean
+
+	/**
+	 * false: hide the edit csv button and the file context menu action to open the editor (useful if you want to call this extension from another extension and show a custom button), 
+	 * true: show them
+	 * 
+	 * NOTE this can be set via other extension BUT has no effect (!) as the setting is used stored in the users config by vs code
+	 */
+	hideOpenCsvEditorUiActions: boolean
+
+	/**
+	 * if the table should be opened at the cursor position and select the corresponding csv cell
+	 *
+	 * initialOnly_correctRowAlwaysFirstColumn: (initial only) select the correct row at the cursor position but always select the first column
+	 * initialOnly_correctRowAndColumn: only opens the table at the cursor position (cell) the first time the table is opened
+	 * never: open the table at the top left corner
+	 */
+	openTableAndSelectCellAtCursorPos: "initialOnly_correctRowAlwaysFirstColumn" | "initialOnly_correctRowAndColumn" | "never"
+
+	/**
+	 * the paste mode/behavior
+	 * note that the normal processing is done by handsontable (sheet.js) and we just join the cells back again
+	 *
+	 * normal: normal paste (rows and columns are respected),
+	 * onlyKeepRowSeparators: only keep row separators (ignore column separators) (every row will have 1 column),
+	 * onlyKeepColumnSeparators: only keep column separators (ignore row separators) (only 1 row will be pasted),
+	 * ignoreAllSeparators: always paste into a single cell (ignoring row and column separator)"
+	 */
+	pasteMode: "normal" | "onlyKeepRowSeparators" | "onlyKeepColumnSeparators" | "ignoreAllSeparators"
+
+	/**
+	 * sets the font family usesd in the table
+	 * default: use the default font
+	 * sameAsCodeEditor: use the same font family as the code editor
+	 */
+	fontFamilyInTable: "default" | "sameAsCodeEditor"
 }
 
 /* --- frontend settings --- */
@@ -425,7 +512,7 @@ type StringSlice = {
 	totalSlices: number
 }
 
-/*+
+/*
  * see https://handsontable.com/docs/6.2.2/demo-searching.html
  */
 type HandsontableSearchResult = {
@@ -438,8 +525,8 @@ type HandsontableSearchResult = {
 	 * the physical row index (needed because the visual index depends on sorting (and maybe virtual rendering?))
 	 */
 	rowReal: number
-		/**
-	 * the visual index
+	/**
+ 	 * the visual index
 	 */
 	col: number
 
@@ -460,12 +547,13 @@ type HeaderRowWithIndex = {
 	 * entries can be null e.g. for new columns
 	 * for null we display the column name 'column X' where X is the number of the column
 	 * however, after opening the cell editor null becomes the empty string (after committing the value)...
+	 * these are visual indices as we use this for rendering...
 	 */
 	row: Array<string | null>
-/**
- * the physical row index of the header row
- * this is needed if we want to insert the header row back into the table (or remove)
- */
+	/**
+	 * the physical row index of the header row
+	 * this is needed if we want to insert the header row back into the table (or remove)
+	 */
 	physicalIndex: number
 }
 
@@ -489,6 +577,9 @@ type Point = {
 type ExtendedCsvParseResult = {
 	data: string[][]
 	columnIsQuoted: boolean[]
+	outLineIndexToCsvLineIndexMapping: number[] | null
+	outColumnIndexToCsvColumnIndexMapping: number[][] | null
+	originalContent: string
 }
 
 type NumbersStyle = {
@@ -515,3 +606,45 @@ type KnownNumberStylesMap = {
 	['en']: NumbersStyle
 	['non-en']: NumbersStyle
 }
+type EditHeaderCellAction = {
+	actionType: 'changeHeaderCell'
+	change: [0, colIndex: number, beforeValue: string, afterValue: string]
+}
+type RemoveColumnAction = {
+	actionType: 'remove_col'
+	amount: number
+	index: number
+	indexes: number[]
+	//a table with the removed data
+	data: string[][]
+}
+
+type InsertColumnAction = {
+	actionType: 'insert_col'
+}
+
+
+
+interface ParseResult {
+	data: Array<any>;
+	errors: Array<ParseError>;
+	meta: ParseMeta;
+	outLineIndexToCsvLineIndexMapping: number[] | undefined
+	outColumnIndexToCsvColumnIndexMapping: number[][] | undefined
+}
+
+interface ParseConfig {
+	calcLineIndexToCsvLineIndexMapping: boolean
+	calcColumnIndexToCsvColumnIndexMapping: boolean
+}
+
+type HotCellPos = {
+	rowIndex: number
+	colIndex: number
+}
+
+type HotViewportOffsetInPx = {
+	top: number
+	left: number
+}
+

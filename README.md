@@ -1,4 +1,4 @@
-# vscode-edit-csv README
+# vscode-edit-csv
 
 This extensions allows you to edit csv files with an excel like table ui
 
@@ -74,7 +74,7 @@ When you click on `edit csv file`
 - the current config is stringified and injected into the editor (webview) html
 - a manager stores a reference to the webview, source file uri, editor uri
 
-- in the webview the pieces are put together and the text is parsed as csv and displayed in the (handson) table element
+- in the webview the pieces are put together and the text is parsed as csv and displayed in the (handsontable) table element
 
 When you click on `apply`
 
@@ -104,8 +104,6 @@ Now the file is treated as a csv file and is recognized by the extension
 
 ## Known Issues
 
-- after reordering columns or rows (e.g. sorting or manually dragged) inserting rows/col won't work (ui gets out of sync with data)
-
 - `apply and save` an unnamed file will close the editor
 	- this is because the new uri for the new file is not known and for some reason if an extension saves an unnamed file the new file is not displayed automatically
 		- maybe this can be resolved when https://github.com/Microsoft/vscode/issues/43768 is closed
@@ -119,13 +117,14 @@ Now the file is treated as a csv file and is recognized by the extension
 
 ## Alternatives
 
-*If you want to preview csv files you can go for the extension [Excel Viewer](https://marketplace.visualstudio.com/items?itemName=GrapeCity.gc-excelviewer). It has some more advanced sorting and filtering features.*
+I recommend installing the `Rainbow CSV` extension, the extensions play well together!
+
+*If you want to only view csv files you can go for the extension [Excel Viewer](https://marketplace.visualstudio.com/items?itemName=GrapeCity.gc-excelviewer). It has some more advanced sorting and filtering features.*
 
 ## How long will it stay in preview?
 
-There are two things missing...
+There is one things missing...
 
-- a pretty icon ;)
 - tests
 	- especially for interaction between vs code and the webview
 	- I added some listeners to handsontable hooks which manipulate rendering, selection...
@@ -142,12 +141,38 @@ There are two things missing...
 - for csv parsing/writing: [papaparse](https://github.com/mholt/PapaParse)
 	- with small custom modifications to handle comments specially
 - for grid/table element: [handsontable](https://github.com/handsontable/handsontable)
-- for ui: [bulma](https://github.com/jgthms/bulma), [bulma-extension](https://github.com/Wikiki/bulma-extensions), [fontawesome](https://github.com/FortAwesome/Font-Awesome)
+- for ui: [vs code webview-ui-toolkit](https://github.com/microsoft/vscode-webview-ui-toolkit), [fontawesome](https://github.com/FortAwesome/Font-Awesome)
 - for shortcuts: [mousetrap](https://github.com/ccampbell/mousetrap)
 
 *see `thirdParty` folders*
 
 There are some more in `package.json`. Even if they are not referenced directly, they are used e.g. for the browser build. We copy them from `node_modules` into the `thirdParty` folders.
+
+## Open the editor from other (your) extension with custom settings
+
+There is a command `edit-csv.editWithConfig`. It can be used to open the editor with settings specified by you.
+
+All possible settings can be found in `[project root]/csvEditorHtml/types.d.ts > EditCsvConfig`. The easiest way is to copy both types `EditCsvConfig` and `EditCsvConfigOverwrite` and then call the extenion command like this:
+
+```ts
+ vscode.commands.registerCommand('yourExtension.yourCommand', () => {
+	let overwriteSettings: EditCsvConfigOverwrite = {
+		readOption_hasHeader: "true",
+		//other options, auto completion enabled
+	}
+
+	vscode.commands.executeCommand(`edit-csv.editWithConfig`, overwriteSettings)
+})
+```
+
+There is one problem left: the `Edit csv` button in the title bar (and the file right click menu action) will still use the settings set by the user...
+For this there is the option `csv-edit.hideOpenCsvEditorUiActions`. If set to true it will hide the two ui actions. This way you can create a buttom from your extension and open the editor and force your settings.
+
+**Make sure to keep the type EditCsvConfig up-to-date (in case any types change)**
+
+The extension will warn you about any unknown settings supplied but will not check the actual property values!
+
+It will overwrite the settings configured by the user and call the same method as `edit-csv.edit` (the default when the editor is opened via the `Edit csv` button).
 
 ## How to build locally
 
@@ -165,3 +190,10 @@ then press `F5` to run the extension
 When you edit `csvEditorHtml/index.html` you need to manually copy the changes (everything in the body but without the scripts) into `src/getHtml.ts` (past into body)
 
 You can also open `csvEditorHtml/index.html` in your favorite browser and play around *(the vs code settings are not applied in the browser)*
+
+## License
+
+Code: MIT
+
+Logo: CC BY NC 3.0 by Janis Dähne
+

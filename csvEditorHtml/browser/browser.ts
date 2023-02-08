@@ -44,8 +44,6 @@ const readOptionAutoEncodingOption = _getById(`read-option-encoding-auto`) as HT
 
 
 //--- modals
-const changelogModalDiv = _getById(`changelog-modal`) as HTMLDivElement
-
 
 /** encoding of the last read operation when auto detect is enabled */
 let _lastDetectedReadEncoding: string | null = null
@@ -86,14 +84,14 @@ const supportedAutoDetectEncodings: SupportedEncoding[] = [
 ]
 
 supportedAutoDetectEncodings.forEach((p, index) => {
-	const opt = document.createElement(`option`)
+	const opt = document.createElement(`vscode-option`) as HTMLOptionElement
 	opt.innerText = p.name
 	opt.value = `${index}`
 	readOptionEncodingSelect.appendChild(opt)
 })
 
 supportedAutoDetectEncodings.forEach((p, index) => {
-	const opt = document.createElement(`option`)
+	const opt = document.createElement(`vscode-option`) as HTMLOptionElement
 	opt.innerText = p.name
 	opt.value = `${index}`
 	writeOptionEncodingSelect.appendChild(opt)
@@ -395,15 +393,6 @@ function resetDataFromResetDialogWithEncoding() {
 	startRenderData()
 }
 
-
-function toggleChangelogModal(isVisible: boolean) {
-	if (isVisible) {
-		changelogModalDiv.classList.add('is-active')
-		return
-	}
-
-	changelogModalDiv.classList.remove('is-active')
-}
 
 //--------- setup keybindings
 

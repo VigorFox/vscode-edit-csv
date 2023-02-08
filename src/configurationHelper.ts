@@ -4,10 +4,12 @@ import { limitSingleCharacterString } from "./util";
 
 
 
-const defaultConfig: CsvEditSettings = {
+const defaultConfig: EditCsvConfig = {
 	highlightCsvComments: true,
 	lastRowEnterBehavior: 'default',
 	lastColumnTabBehavior: 'default',
+	lastRowOrFirstRowNavigationBehavior: 'wrap',
+	lastColumnOrFirstColumnNavigationBehavior: 'wrap',
 	optionsBarAppearance: "collapsed",
 	readOption_comment: "#",
 	readOption_quoteChar: '"',
@@ -39,15 +41,20 @@ const defaultConfig: CsvEditSettings = {
 	initialNumbersStyle: 'en',
 	insertRowBehavior: 'keepRowKeepColumn',
 	insertColBehavior: 'keepRowKeepColumn',
+	initiallyIsInReadonlyMode: false,
+	hideOpenCsvEditorUiActions: false, //noop, has only effect if set inside the user settings
+	openTableAndSelectCellAtCursorPos: "initialOnly_correctRowAlwaysFirstColumn",
+	pasteMode: 'normal',
+	fontFamilyInTable: 'default',
 }
 
 /**
  * returns the configuration for this extension
  */
-export function getExtensionConfiguration(): CsvEditSettings {
+export function getExtensionConfiguration(): EditCsvConfig {
 	const configObj = vscode.workspace.getConfiguration(editorUriScheme)
 
-	const copy = {
+	const copy: EditCsvConfig = {
 		...defaultConfig
 	}
 
@@ -69,5 +76,25 @@ export function getExtensionConfiguration(): CsvEditSettings {
 	copy.writeOption_quoteChar = limitSingleCharacterString(copy.writeOption_quoteChar)
 	copy.writeOption_escapeChar = limitSingleCharacterString(copy.writeOption_escapeChar)
 
+	console.log(`[edit csv] settings`, copy)
+
 	return copy
+}
+
+export function overwriteConfiguration(currentConfig: EditCsvConfig, overwriteConfigObj: EditCsvConfigOverwrite): void{
+
+	for (const key in overwriteConfigObj) {
+
+		if (!currentConfig.hasOwnProperty(key)) {
+			vscode.window.showWarningMessage(`unknown setting '${key}', skipping this setting`)
+			continue
+		}
+
+		//@ts-ignore
+		currentConfig[key] = overwriteConfigObj[key] as any
+
+		console.log(`[edit csv] overwrote config key: '${key}' with value: `, (overwriteConfigObj as any)[key])
+	}
+
+	console.log(`[edit csv] resulting settings`, currentConfig)
 }

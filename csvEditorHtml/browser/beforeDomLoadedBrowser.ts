@@ -10,12 +10,18 @@ const executeAfterDomLoadedQueue: Array<() => void> = []
 
 var initialVars: InitialVars = {
 	isWatchingSourceFile: false,
+	sourceFileCursorLineIndex: null,
+	sourceFileCursorColumnIndex: null,
+	isCursorPosAfterLastColumn: false,
+	openTableAndSelectCellAtCursorPos: 'initialOnly_correctRowAlwaysFirstColumn',
 }
 
-var initialConfig: CsvEditSettings | undefined = {
+var initialConfig: EditCsvConfig | undefined = {
 	highlightCsvComments: true,
-	lastRowEnterBehavior: 'createRow',
+	lastRowEnterBehavior: 'default',
 	lastColumnTabBehavior: 'createColumn',
+	lastRowOrFirstRowNavigationBehavior: 'wrap',
+	lastColumnOrFirstColumnNavigationBehavior: 'wrap',
 	optionsBarAppearance: "collapsed",
 	readOption_comment: "#",
 	readOption_quoteChar: '"',
@@ -47,6 +53,11 @@ var initialConfig: CsvEditSettings | undefined = {
 	initialNumbersStyle: 'en',
 	insertRowBehavior: 'keepRowKeepColumn',
 	insertColBehavior: 'keepRowKeepColumn',
+	initiallyIsInReadonlyMode: false,
+	hideOpenCsvEditorUiActions: false, //noop, has only effect if set inside the user settings (vs code extension)
+	openTableAndSelectCellAtCursorPos: "never",
+	pasteMode: 'normal',
+	fontFamilyInTable: 'default',
 }
 
 function __getById(id: string): HTMLElement {

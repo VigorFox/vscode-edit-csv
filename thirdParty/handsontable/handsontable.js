@@ -23,8 +23,8 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * 
- * Version: 6.4.1
- * Release date: 19/12/2018 (built at 13/12/2020 14:35:33)
+ * Version: 6.4.5
+ * Release date: 19/12/2018 (built at 22/04/2022 18:33:20)
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -29737,9 +29737,9 @@ Handsontable.DefaultSettings = _defaultSettings.default;
 Handsontable.EventManager = _eventManager.default;
 Handsontable._getListenersCounter = _eventManager.getListenersCounter; // For MemoryLeak tests
 
-Handsontable.buildDate = "13/12/2020 14:35:33";
+Handsontable.buildDate = "22/04/2022 18:33:20";
 Handsontable.packageName = "handsontable";
-Handsontable.version = "6.4.1";
+Handsontable.version = "6.4.5";
 var baseVersion = "";
 
 if (baseVersion) {
@@ -39707,6 +39707,7 @@ function EditorManager(instance, priv, selection) {
   var destroyed = false;
   var lock = false;
   var activeEditor;
+  var isCurrentlyComposing = false;
 
   function moveSelectionAfterEnter(shiftKey) {
     var enterMoves = typeof priv.settings.enterMoves === 'function' ? priv.settings.enterMoves(event) : priv.settings.enterMoves;
@@ -39758,10 +39759,16 @@ function EditorManager(instance, priv, selection) {
       return;
     }
 
-    instance.runHooks('beforeKeyDown', event); // keyCode 229 aka 'uninitialized' doesn't take into account with editors. This key code is produced when unfinished
+    instance.runHooks('beforeKeyDown', event);
+
+    if (event.keyCode === 27 || event.keyCode === 13) {
+      // esc | enter
+      isCurrentlyComposing = false;
+    } // keyCode 229 aka 'uninitialized' doesn't take into account with editors. This key code is produced when unfinished
     // character is entering (using IME editor). It is fired mainly on linux (ubuntu) with installed ibus-pinyin package.
 
-    if (destroyed || event.keyCode === 229) {
+
+    if (destroyed || event.keyCode === 229 && isCurrentlyComposing === false) {
       return;
     }
 
@@ -39780,7 +39787,22 @@ function EditorManager(instance, priv, selection) {
 
     if (activeEditor && !activeEditor.isWaiting()) {
       if (!(0, _unicode.isMetaKey)(event.keyCode) && !(0, _unicode.isCtrlMetaKey)(event.keyCode) && !ctrlDown && !_this.isEditorOpened()) {
-        _this.openEditor('', event);
+        if (event.keyCode >= 173 && event.keyCode <= 183 || event.keyCode === 19 // pause/break
+        || event.keyCode === 144 // num lock
+        || event.keyCode === 145 // scroll lock
+        ) {// see https://www.freecodecamp.org/news/javascript-keycode-list-keypress-event-key-codes/
+            // AudioVolumeMute, AudioVolumeDown, AudioVolumeUp, LaunchMediaPlayer, LaunchApplication1, LaunchApplication2
+            // these are not printable so we don't want to clear the cell value
+          } else {
+          // eslint-disable-next-line no-lonely-if
+          if (isCurrentlyComposing) {
+            _this.openEditor(event.key, event);
+
+            isCurrentlyComposing = false;
+          } else {
+            _this.openEditor('', event);
+          }
+        }
 
         return;
       }
@@ -39955,15 +39977,29 @@ function EditorManager(instance, priv, selection) {
   function init() {
     instance.addHook('afterDocumentKeyDown', onKeyDown);
     eventManager.addEventListener(document.documentElement, 'keydown', function (event) {
+      // console.log(isCurrentlyComposing);
       if (!destroyed) {
         instance.runHooks('afterDocumentKeyDown', event);
       }
     }); // Open editor when text composition is started (IME editor)
+    // eslint-disable-next-line no-unused-vars
 
     eventManager.addEventListener(document.documentElement, 'compositionstart', function (event) {
-      if (!destroyed && activeEditor && !activeEditor.isOpened() && instance.isListening()) {
-        _this.openEditor('', event);
-      }
+      isCurrentlyComposing = true; // console.log('compositionstart', event);
+      // if (!destroyed && activeEditor && !activeEditor.isOpened() && instance.isListening()) {
+      //   _this.openEditor('', event);
+      // }
+    }); // eslint-disable-next-line no-unused-vars
+
+    eventManager.addEventListener(document.documentElement, 'compositionupdate', function (event) {// console.log('compositionupdate', event);
+    }); // this is fired after key down so we cannot really use this... and sometimes it's now fired e.g. on esc to cancel
+    // eslint-disable-next-line no-unused-vars
+
+    eventManager.addEventListener(document.documentElement, 'compositionend', function (event) {
+      // console.log('compositionend', event);
+      isCurrentlyComposing = false; // if (!destroyed && activeEditor && !activeEditor.isOpened() && instance.isListening()) {
+      //   _this.openEditor(event.data, event);
+      // }
     });
 
     function onDblClick(event, coords, elem) {
@@ -39980,11 +40016,11 @@ function EditorManager(instance, priv, selection) {
     instance.view.wt.update('onCellDblClick', onDblClick);
   }
   /**
-  * Lock the editor from being prepared and closed. Locking the editor prevents its closing and
-  * reinitialized after selecting the new cell. This feature is necessary for a mobile editor.
-  *
-  * @function lockEditor
-  * @memberof! Handsontable.EditorManager#
+   * Lock the editor from being prepared and closed. Locking the editor prevents its closing and
+   * reinitialized after selecting the new cell. This feature is necessary for a mobile editor.
+   *
+   * @function lockEditor
+   * @memberof! Handsontable.EditorManager#
    */
 
 
@@ -39992,11 +40028,11 @@ function EditorManager(instance, priv, selection) {
     lock = true;
   };
   /**
-  * Unlock the editor from being prepared and closed. This method restores the original behavior of
-  * the editors where for every new selection its instances are closed.
-  *
-  * @function unlockEditor
-  * @memberof! Handsontable.EditorManager#
+   * Unlock the editor from being prepared and closed. This method restores the original behavior of
+   * the editors where for every new selection its instances are closed.
+   *
+   * @function unlockEditor
+   * @memberof! Handsontable.EditorManager#
    */
 
 
@@ -51882,6 +51918,28 @@ function (_BasePlugin) {
      */
 
     _this.rowsLimit = ROWS_LIMIT;
+    /**
+     * when pasting text data (normally from spreadsheets) there are two types of separators
+     * row separators, which are new line characters (when we read a new line, we start a new row)
+     * column separators, which are tabs (when we read a column, we start a new column)
+     *
+     * this way we can paste multiple cells from text
+     * despite the options we always process the text (if we got text from clipboard) with sheet.js and get cells
+     * the options only re-introduce the not ignored separators
+     *
+     * `"normal"`: when pasting text data, we respect row and column separators (new line characters and tabs, respectively)
+     * `"onlyKeepColumnSeparators"`: when pasting text data, we only keep columns (ignore row separators)
+     * `"onlyKeepRowSeparators"`: when pasting text data, we only keep rows (ignore column separators)
+     * `"ignoreAllSeparators"`: always paste the content into a single cell (keep all separators)
+     *
+     * NOTE that we still use the multi cell logic and only convert the cells back with join (so Sheet js parse is applied, e.g. convert double quotes to single quotes, etc).
+     * @type {"normal" | "onlyKeepRowSeparators" | "onlyKeepColumnSeparators" | "ignoreAllSeparators"}
+     */
+
+    _this.pasteSeparatorMode = 'normal'; // these are only used for combining the cells again
+
+    _this.pasteRowJoinSeparator = '\n';
+    _this.pasteColumnJoinSeparator = '\t';
     privatePool.set(_assertThisInitialized(_assertThisInitialized(_this)), {
       isTriggeredByCopy: false,
       isTriggeredByCut: false,
@@ -51924,6 +51982,7 @@ function (_BasePlugin) {
         this.pasteMode = settings.copyPaste.pasteMode || this.pasteMode;
         this.rowsLimit = settings.copyPaste.rowsLimit || this.rowsLimit;
         this.columnsLimit = settings.copyPaste.columnsLimit || this.columnsLimit;
+        this.pasteIntoSingleCell = settings.copyPaste.pasteIntoSingleCell || this.pasteIntoSingleCell;
       }
 
       this.addHook('afterContextMenuDefaultOptions', function (options) {
@@ -52322,6 +52381,87 @@ function (_BasePlugin) {
 
       if (inputArray.length === 0) {
         return;
+      }
+
+      var colCount = inputArray[0].length;
+
+      switch (this.pasteSeparatorMode) {
+        case 'onlyKeepColumnSeparators':
+          {
+            /*
+              a | b | c           a | b | c
+              --|---|--     --->  d | e | f
+              d | e | f
+             */
+            var _tmpColsArray = [];
+
+            for (var colIndex = 0; colIndex < colCount; colIndex++) {
+              _tmpColsArray[colIndex] = '';
+
+              for (var rowIndex = 0; rowIndex < inputArray.length; rowIndex++) {
+                // eslint-disable-next-line prefer-template
+                _tmpColsArray[colIndex] += inputArray[rowIndex][colIndex] + (rowIndex !== inputArray.length - 1 ? this.pasteRowJoinSeparator : '');
+              }
+            }
+
+            inputArray = [_tmpColsArray];
+            break;
+          }
+
+        case 'onlyKeepRowSeparators':
+          {
+            /*
+              a | b | c           a \t b \t c
+              --|---|--     --->  ---------
+              d | e | f           d \t e \t f
+             */
+            var _tmpRowsArray = [];
+
+            for (var _rowIndex = 0; _rowIndex < inputArray.length; _rowIndex++) {
+              _tmpRowsArray.push(['']);
+
+              for (var _colIndex = 0; _colIndex < colCount; _colIndex++) {
+                // add back the col separator for the single cell
+                // eslint-disable-next-line prefer-template
+                _tmpRowsArray[_rowIndex][0] += inputArray[_rowIndex][_colIndex] + (_colIndex !== colCount - 1 ? this.pasteColumnJoinSeparator : '');
+              }
+            }
+
+            inputArray = _tmpRowsArray;
+            break;
+          }
+
+        case 'ignoreAllSeparators':
+          {
+            /*
+              a | b | c           a \t b \t c \n
+              --|---|--     --->  d \t e \t f
+              d | e | f
+             */
+            var cellValue = '';
+
+            for (var _rowIndex2 = 0; _rowIndex2 < inputArray.length; _rowIndex2++) {
+              for (var _colIndex2 = 0; _colIndex2 < colCount; _colIndex2++) {
+                // add back the col separator for the single cell
+                // eslint-disable-next-line prefer-template
+                cellValue += inputArray[_rowIndex2][_colIndex2] + (_colIndex2 !== colCount - 1 ? this.pasteColumnJoinSeparator : '');
+              } // add back the row separator for the single cell
+
+
+              if (_rowIndex2 !== inputArray.length - 1) {
+                cellValue += this.pasteRowJoinSeparator;
+              }
+            }
+
+            inputArray = [[cellValue]];
+            break;
+          }
+
+        case 'normal':
+        default:
+          {
+            break;
+          }
       }
 
       if (this.hot.runHooks('beforePaste', inputArray, this.copyableRanges) === false) {
@@ -52811,6 +52951,14 @@ exports.tableToArray = tableToArray;
 
 var _mixed = __webpack_require__(14);
 
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance"); }
+
+function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
+
 /**
  * Converts javascript array into HTMLTable.
  *
@@ -52864,40 +53012,190 @@ function isHTMLTable(element) {
  */
 
 
+var ESCAPED_HTML_CHARS = {
+  '&nbsp;': '\x20',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>'
+};
+var regEscapedChars = new RegExp(Object.keys(ESCAPED_HTML_CHARS).map(function (key) {
+  return "(".concat(key, ")");
+}).join('|'), 'gi');
+
 function tableToArray(element) {
-  var result = [];
+  var rootDocument = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : document;
+  var settingsObj = {};
+  var fragment = rootDocument.createDocumentFragment();
+  var tempElem = rootDocument.createElement('div');
+  fragment.appendChild(tempElem);
   var checkElement = element;
 
   if (typeof checkElement === 'string') {
-    var tempElem = document.createElement('div');
-    tempElem.innerHTML = checkElement.replace(/\n/g, '');
+    var escapedAdjacentHTML = checkElement.replace(/<td\b[^>]*?>([\s\S]*?)<\/\s*td>/g, function (cellFragment) {
+      var openingTag = cellFragment.match(/<td\b[^>]*?>/g)[0];
+      var cellValue = cellFragment.substring(openingTag.length, cellFragment.lastIndexOf('<')).replace(/(<(?!br)([^>]+)>)/gi, '');
+      var closingTag = '</td>';
+      return "".concat(openingTag).concat(cellValue).concat(closingTag);
+    });
+    tempElem.insertAdjacentHTML('afterbegin', "".concat(escapedAdjacentHTML));
     checkElement = tempElem.querySelector('table');
   }
 
-  if (checkElement && isHTMLTable(checkElement)) {
-    var rows = checkElement.rows;
-    var rowsLen = rows && rows.length;
-    var tempArray = [];
-
-    for (var row = 0; row < rowsLen; row += 1) {
-      var cells = rows[row].cells;
-      var cellsLen = cells.length;
-      var newRow = [];
-
-      for (var column = 0; column < cellsLen; column += 1) {
-        var cell = cells[column];
-        cell.innerHTML = cell.innerHTML.trim().replace(/<br(.|)>(\n?)/, '\n');
-        var cellText = cell.innerText;
-        newRow.push(cellText);
-      }
-
-      tempArray.push(newRow);
-    }
-
-    result.push.apply(result, tempArray);
+  if (!checkElement || !isHTMLTable(checkElement)) {
+    return;
   }
 
-  return result;
+  var generator = tempElem.querySelector('meta[name$="enerator"]'); // we leave out the G because might be upper/lower
+
+  var hasRowHeaders = checkElement.querySelector('tbody th') !== null;
+  var trElement = checkElement.querySelector('tr'); // we try to get the max col count...
+  // however, this is not perfect as individual cells might have different spans... and we only check the first row
+
+  var countCols = !trElement ? 0 : Array.from(trElement.cells).reduce(function (cols, cell) {
+    return cols + cell.colSpan;
+  }, 0) - (hasRowHeaders ? 1 : 0);
+  var fixedRowsBottom = checkElement.tFoot && Array.from(checkElement.tFoot.rows) || [];
+  var fixedRowsTop = [];
+  var hasColHeaders = false;
+  var thRowsLen = 0;
+  var countRows = 0; // we omit row headers and col headers in the data
+
+  if (checkElement.tHead) {
+    var thRows = Array.from(checkElement.tHead.rows).filter(function (tr) {
+      var isDataRow = tr.querySelector('td') !== null;
+
+      if (isDataRow) {
+        fixedRowsTop.push(tr);
+      }
+
+      return !isDataRow;
+    });
+    thRowsLen = thRows.length;
+    hasColHeaders = thRowsLen > 0;
+
+    if (thRowsLen > 1) {
+      settingsObj.nestedHeaders = Array.from(thRows).reduce(function (rows, row) {
+        var headersRow = Array.from(row.cells).reduce(function (headers, header, currentIndex) {
+          if (hasRowHeaders && currentIndex === 0) {
+            return headers;
+          }
+
+          var colspan = header.colSpan,
+              innerHTML = header.innerHTML;
+          var nextHeader = colspan > 1 ? {
+            label: innerHTML,
+            colspan: colspan
+          } : innerHTML;
+          headers.push(nextHeader);
+          return headers;
+        }, []);
+        rows.push(headersRow);
+        return rows;
+      }, []);
+    } else if (hasColHeaders) {
+      settingsObj.colHeaders = Array.from(thRows[0].children).reduce(function (headers, header, index) {
+        if (hasRowHeaders && index === 0) {
+          return headers;
+        }
+
+        headers.push(header.innerHTML);
+        return headers;
+      }, []);
+    }
+  }
+
+  if (fixedRowsTop.length) {
+    settingsObj.fixedRowsTop = fixedRowsTop.length;
+  }
+
+  if (fixedRowsBottom.length) {
+    settingsObj.fixedRowsBottom = fixedRowsBottom.length;
+  }
+
+  var dataRows = [].concat(fixedRowsTop, _toConsumableArray(Array.from(checkElement.tBodies).reduce(function (sections, section) {
+    sections.push.apply(sections, _toConsumableArray(Array.from(section.rows)));
+    return sections;
+  }, [])), _toConsumableArray(fixedRowsBottom));
+  countRows = dataRows.length;
+  var dataArr = new Array(countRows);
+
+  for (var r = 0; r < countRows; r++) {
+    dataArr[r] = new Array(countCols);
+  }
+
+  var mergeCells = [];
+  var rowHeaders = [];
+
+  for (var row = 0; row < countRows; row++) {
+    var tr = dataRows[row];
+    var cells = Array.from(tr.cells);
+    var cellsLen = cells.length;
+
+    for (var cellId = 0; cellId < cellsLen; cellId++) {
+      var cell = cells[cellId];
+      var nodeName = cell.nodeName,
+          innerHTML = cell.innerHTML,
+          rowspan = cell.rowSpan,
+          colspan = cell.colSpan; // as merged cells contain null as data the first col we find with undefined is the first free cell
+
+      var col = dataArr[row].findIndex(function (value) {
+        return value === undefined;
+      });
+
+      if (nodeName === 'TD') {
+        if (rowspan > 1 || colspan > 1) {
+          for (var rstart = row; rstart < row + rowspan; rstart++) {
+            if (rstart < countRows) {
+              for (var cstart = col; cstart < col + colspan; cstart++) {
+                dataArr[rstart][cstart] = null;
+              }
+            }
+          }
+
+          var styleAttr = cell.getAttribute('style');
+          var ignoreMerge = styleAttr && styleAttr.includes('mso-ignore:colspan');
+
+          if (!ignoreMerge) {
+            mergeCells.push({
+              col: col,
+              row: row,
+              rowspan: rowspan,
+              colspan: colspan
+            });
+          }
+        }
+
+        var cellValue = '';
+
+        if (generator && /excel/gi.test(generator.content)) {
+          cellValue = innerHTML.replace(/[\r\n][\x20]{0,2}/g, '\x20').replace(/<br(\s*|\/)>[\r\n]?[\x20]{0,3}/gim, '\r\n');
+        } else {
+          cellValue = innerHTML.replace(/<br(\s*|\/)>[\r\n]?/gim, '\r\n');
+        }
+
+        dataArr[row][col] = cellValue.replace(regEscapedChars, function (match) {
+          return ESCAPED_HTML_CHARS[match];
+        });
+      } else {
+        rowHeaders.push(innerHTML);
+      }
+    }
+  }
+
+  if (mergeCells.length) {
+    settingsObj.mergeCells = mergeCells;
+  }
+
+  if (rowHeaders.length) {
+    settingsObj.rowHeaders = rowHeaders;
+  }
+
+  if (dataArr.length) {
+    settingsObj.data = dataArr;
+  } // we only need the data
+
+
+  return settingsObj.data;
 }
 
 /***/ }),

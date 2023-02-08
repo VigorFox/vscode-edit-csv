@@ -13,11 +13,20 @@ vsc-extension-quickstart.md
 **/*.ts
 TODO.md
 node_modules/@types
+node_modules/@microsoft
+node_modules/@vscode/webview-ui-toolkit/**/*
+!node_modules/@vscode/webview-ui-toolkit/dist/toolkit.min.js
+node_modules/react/**/*
+node_modules/tabbable/**/*
+node_modules/exenv-es6/**/*
+node_modules/loose-envify/**/*
+node_modules/js-tokens/**/*
+node_modules/tslib/**/*
 backup
 images/**
+!images/logo.png
 scripts.md
 thirdParty/info.md
-thirdParty/bulma/bulma.css
 thirdParty/handsontable/handsontable.css
 thirdParty/handsontable/handsontable.d.ts
 thirdParty/handsontable/handsontable.js
@@ -32,4 +41,5 @@ cypress
 csvEditorHtml/browser/**
 csvEditorHtml/out/browser/**
 # not used anymore but we might need to copy certain rules...
-thirdParty/bulma-extensions/**
+.vscode-test-web/**
+exampleCSV/**

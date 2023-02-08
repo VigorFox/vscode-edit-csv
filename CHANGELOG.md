@@ -2,6 +2,85 @@
 
 ## [Unreleased]
 
+## 0.7.2
+- fixed issue #97 - fixed rows/columns is ignored if `hasHeader` was changed
+
+## 0.7.1
+- fixed issue #94 - find widget buttons are outside if panel
+- find widget design is now more similar to vs code ones
+
+## 0.7.0
+- fixed issue #73 - changed style to match vs code ones (with webview-ui-toolki)
+	- however, there are some issues with 
+		- text input: input event don't get triggered when some table cell has focus...
+		- dropdown: chaning font size is not possible
+	- removed bulma css
+
+## 0.6.10
+- fixed issue #93 - regex search ignored match-case option
+
+## 0.6.9
+- added option `pasteMode` to control how clipboard content is pasted into the table
+	- it allows to ignore row/column separators (\n, \t) to paste the data into "fewer" cells
+- added setting `fontFamilyInTable` to control which font is used for the table
+- added option `initialOnly_correctRowAlwaysFirstColumn` to setting `openTableAndSelectCellAtCursorPos` to only open the correct row but always column one
+	- this is now the new default
+- in the setting `openTableAndSelectCellAtCursorPos` the option `initalOnly` was renamed to `initialOnly_correctRowAndColumn`
+- added settings `lastRowOrFirstRowNavigationBehavior` and `lastColumnOrFirstColumnNavigationBehavior` to control if we wrap ad the start/end of rows/columns while navigating
+	- works with `lastRowEnterBehavior`, `lastColumnTabBehavior` (the `default` option will apply these two new settings)
+	- see https://handsontable.com/docs/6.2.2/Options.html#autoWrapRow
+
+## 0.6.8
+
+- added option `openTableAndSelectCellAtCursorPos` to open the table and selected the cell where the cursor was (fixed feature request #83)
+	- on by default!
+	- note for multi character delimiters it might not work properly (but should most of the time, only tested a few cases and it worked)
+	- if comments are hidden and the cursor is on a comment, the next row is selected
+- after `reset dat and apply read options` the scroll position and selected cell is restored (issue #84)
+
+## 0.6.7
+
+- added new command `edit-csv.editWithConfig"` which is the same as `edit-csv.edit` but one can supply settings to overwrite (see type `[project root]/csvEditorHtml/types.d.ts > EditCsvConfigOverwrite`)
+	- added setting `hideOpenCsvEditorUiActions` to hide the title bar button and file context menu action, in case the other extension want to show custom button to trigger the editor
+	- example how to use this from another extension can be found in the readme
+- removed `editor/title/context` actions (probably not used...)
+- small readme updates
+
+## 0.6.6
+
+- fixed issue #80: cell editor is not commited after pressing `ctrl/cmd+s`, so changes are not applied to file
+
+## 0.6.5
+
+- fixed issue #77: Newlines inserted into pasted data (clipboard)
+	- fixed via new internal handsontable version
+
+## 0.6.4
+
+- fixed issue #72: copy limited to 1000 cells
+	- changed the limit to 10000000
+
+## 0.6.3
+
+- fixed issue #70: Removing columns doesn't remove header
+	- undo/redo does not work with column headers
+
+## 0.6.2
+
+- fixed issue #63: column header cells can now be edited
+- fixed issue #66: added readonly mode
+- fixed issue #64: some non-text keys (e.g. volume controls) not longer clear cell values
+	- also compound characters also not clear cell values
+
+## 0.6.1
+
+- added button to resize column to match their content
+
+## 0.6.0
+
+- fixed issue where reordering/sorting breaks inserting
+- new logo
+
 ## 0.5.8
 
 - fixed issue in papaparse where multi-character delimiters won't work

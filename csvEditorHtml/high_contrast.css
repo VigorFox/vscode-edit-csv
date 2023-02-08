@@ -2,10 +2,6 @@ body.vscode-high-contrast {
 	color: white;
 }
 
-.vscode-high-contrast input.input,
-.vscode-high-contrast .textarea {
-	color: black;
-}
 
 .vscode-high-contrast .button.is-light {
 	color: black;
@@ -185,8 +181,8 @@ body.vscode-high-contrast {
 	background-color: #676767;
 }
 
-.vscode-high-contrast  .find-widget .btn.active {
-	background-color: #0064ff;
+.vscode-high-contrast .find-widget .btn.active {
+	background-color: #28ff00;
 }
 
 .vscode-high-contrast .find-widget .error-message {
@@ -202,4 +198,14 @@ body.vscode-high-contrast {
 	border: 1px solid white;
 	border-collapse: initial;
 	border-radius: 10px;
+}
+
+.vscode-high-contrast .handsontable .htDimmed {
+	/*color: #cacaca;*/ /*harder to read*/
+	cursor: pointer; /*as color does not really work maybe this helps?*/
+	color: inherit;
+}
+
+.vscode-light .row-col-insert-btns {
+	border-left: 1px solid white;
 }

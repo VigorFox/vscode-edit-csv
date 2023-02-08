@@ -2,12 +2,16 @@
 
 
 const defaultInitialVars: InitialVars = {
-	isWatchingSourceFile: false
+	isWatchingSourceFile: false,
+	sourceFileCursorLineIndex: null,
+	sourceFileCursorColumnIndex: null,
+	isCursorPosAfterLastColumn: false,
+	openTableAndSelectCellAtCursorPos: 'initialOnly_correctRowAlwaysFirstColumn',
 }
 
 declare var acquireVsCodeApi: any
 declare var initialContent: string
-declare var initialConfig: CsvEditSettings | undefined
+declare var initialConfig: EditCsvConfig | undefined
 
 declare var initialVars: InitialVars
 
@@ -19,7 +23,7 @@ if (typeof acquireVsCodeApi !== 'undefined') {
 
 if (typeof initialConfig === 'undefined') {
 	// tslint:disable-next-line:no-duplicate-variable
-	var initialConfig = undefined as CsvEditSettings | undefined
+	var initialConfig = undefined as EditCsvConfig | undefined
 	// tslint:disable-next-line:no-duplicate-variable
 	var initialVars = {
 		...defaultInitialVars
@@ -49,8 +53,25 @@ const defaultCsvContentIfEmpty = `,\n,`
  * {string[] | null}
  */
 let headerRowWithIndex: HeaderRowWithIndex | null = null
+let lastClickedHeaderCellTh: Element | null = null
+let editHeaderCellTextInputEl: HTMLInputElement | null = null
+let editHeaderCellTextInputLeftOffsetInPx: number = 0
+let handsontableOverlayScrollLeft: number = 0
+let _onTableScrollThrottled: ((this: HTMLDivElement, e: Event) => void) | null = null
 
 let hiddenPhysicalRowIndices: number[] = []
+
+let copyPasteRowLimit = 10_000_000
+let copyPasteColLimit = 10_000_000
+
+
+type HeaderRowWithIndexUndoStackItem = {
+	action: 'added' | 'removed'
+	visualIndex: number
+	headerData: Array<string | null>
+}
+let headerRowWithIndexUndoStack: Array<HeaderRowWithIndexUndoStackItem> = []
+let headerRowWithIndexRedoStack: Array<HeaderRowWithIndexUndoStackItem> = []
 
 /**
  * this is part of the output from papaparse
@@ -154,6 +175,12 @@ let initialColumnWidth: number = 0
 let shouldApplyHasHeaderAfterRowsAdded = false
 
 /**
+ * table is editable or not, also disables some related ui, e.g. buttons
+ * set via {@link EditCsvConfig.initiallyIsInReadonlyMode}
+ */
+let isReadonlyMode = false
+
+/**
  * stores the widths of the handsontable columns
  * THIS is always synced with the ui
  * it allows us to modify the widths better e.g. restore widths...
@@ -232,6 +259,8 @@ const statSumOfNumbers = _getById(`stat-sum-of-numbers`) as HTMLDivElement
 const numbersStyleEnRadio = _getById(`numbers-style-en`) as HTMLInputElement //radio
 const numbersStyleNonEnRadio = _getById(`numbers-style-non-en`) as HTMLInputElement //radio
 
+const isReadonlyModeToggleSpan = _getById(`is-readonly-mode-toggle`) as HTMLSpanElement
+
 //--- find widget controls
 
 const findWidgetInstance = new FindWidget()
@@ -240,6 +269,10 @@ setupSideBarResizeHandle()
 
 
 /* main */
+
+//used to restore cell selection and scroll pos
+let previousSelectedCell: HotCellPos | null = null
+let previousViewportOffsets: HotViewportOffsetInPx | null = null
 
 //set defaults when we are in browser
 setCsvReadOptionsInitial(defaultCsvReadOptions)
@@ -325,6 +358,15 @@ function setupGlobalShortcutsInVs() {
 	if (vscode) {
 		Mousetrap.bindGlobal(['meta+s', 'ctrl+s'], (e) => {
 			e.preventDefault()
+
+			if (hot) {
+				let editor = hot.getActiveEditor() as any
+				// see https://handsontable.com/docs/6.2.2/tutorial-cell-editor.html
+				if (editor.isOpened()) {
+					editor.finishEditing(false)
+				}
+			}
+
 			postApplyContent(true)
 		})
 	}

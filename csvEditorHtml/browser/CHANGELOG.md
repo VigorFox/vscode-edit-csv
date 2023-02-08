@@ -4,6 +4,93 @@ note that the changelog is also present on the website when you click on the ver
 
 ### [Unreleased]
 
+## 1.3.2
+- (same as vs code extension v0.7.2)
+- fixed issue #97 - fixed rows/columns is ignored if `hasHeader` was changed
+
+## 1.3.1
+
+- (same as vs code extension v0.7.1)
+- fixed issue 94 - find widget buttons are outside if panel
+- find widget design is now more similar to vs code ones
+
+## 1.3.0
+
+- (same as vs code extension v0.7.0)
+- fixed issue #73 - changed style to match vs code ones (with webview-ui-toolki)
+	- however, there are some issues with 
+		- text input: input event don't get triggered when some table cell has focus...
+		- dropdown: chaning font size is not possible
+	- removed bulma css
+
+## 1.2.9
+
+- (same as vs code extension v0.6.10)
+- fixed issue 93 - regex search ignored match-case option)
+
+## 1.2.8
+
+- (same as vs code extension v0.6.9)
+- added option `pasteMode` to control how clipboard content is pasted into the table
+	- it allows to ignore row/column separators (\n, \t) to paste the data into "fewer" cells
+- added setting `fontFamilyInTable` to control which font is used for the table
+- added option `initialOnly_correctRowAlwaysFirstColumn` to setting `openTableAndSelectCellAtCursorPos` to only open the correct row but always column one
+	- this is now the new default
+- in the setting `openTableAndSelectCellAtCursorPos` the option `initalOnly` was renamed to `initialOnly_correctRowAndColumn`
+- added settings `lastRowOrFirstRowNavigationBehavior` and `lastColumnOrFirstColumnNavigationBehavior` to control if we wrap ad the start/end of rows/columns while navigating
+	- works with `lastRowEnterBehavior`, `lastColumnTabBehavior` (the `default` option will apply these two new settings)
+	- see https://handsontable.com/docs/6.2.2/Options.html#autoWrapRow
+
+## 1.2.7
+
+- (same as vs code extension v0.6.8)
+- added option `openTableAndSelectCellAtCursorPos` to open the table and selected the cell where the cursor was (fixed feature request #83)
+	- on by default!
+	- note for multi character delimiters it might not work properly (but should most of the time, only tested a few cases and it worked)
+- after `reset dat and apply read options` the scroll position and selected cell is restored (issue #84)
+
+## 1.2.6
+
+- (same as vs code extension v0.6.6)
+- fixed issue 80: cell editor is not commited after pressing `ctrl/cmd+s`, so changes are not applied to file
+
+## 1.2.5
+
+- (same as vs code extension v0.6.5)
+- fixed issue 77: Newlines inserted into pasted data (clipboard)
+	- fixed via new internal handsontable version
+
+## 1.2.4
+
+- (same as vs code extension v0.6.4)
+- fixed issue 72: copy limited to 1000 cells
+	- changed the limit to 10000000
+
+## 1.2.3
+
+- (same as vs code extension v0.6.3)
+- fixed issue 70: Removing columns doesn't remove header
+	- undo/redo does not work with column headers
+
+## 1.2.2
+
+- (same as vs code extension v0.6.2)
+- fixed issue 63: column header cells can now be edited
+- fixed issue 66: added readonly mode
+- fixed issue 64: some non-text keys (e.g. volume controls) not longer clear cell values
+	- also compound characters also not clear cell values
+
+## 1.2.1
+
+- (same as vs code extension v0.6.1)
+- added button to resize column to match their content
+
+## 1.2.0
+
+- (same as vs code extension v0.6.0)
+- fixed issue where reordering/sorting breaks inserting
+- new logo
+
 ## 1.1.6
 
 - fixed issue in papaparse where multi-character delimiters won't work

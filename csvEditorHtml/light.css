@@ -1,10 +1,26 @@
 body.vscode-light {
 	color: #657b83;
-}
 
-.vscode-light input.input,
-.vscode-light .textarea {
-	color: #657b83;
+	--button-icon-background: transparent;
+	--button-icon-hover-background: rgba(90, 93, 94, 0.31);
+	
+	--input-foreground: #586e75;
+	--input-background: #ddd6c1;
+	--dropdown-border: #d3af86;
+	--dropdown-background: #eee8d5;
+	--checkbox-background: #eee8d5;
+	--checkbox-border: #d3af86;
+
+	--button-secondary-hover-background: #4c5561;
+
+	--button-secondary-background: #5f6a79;
+	--button-secondary-foreground: #ffffff;
+	--foreground: #616161;
+	--input-foreground: #586e75;
+	--focus-border: #d3af86;
+	--list-active-selection-background: #dfca88;
+	--list-active-selection-foreground: #6c6c6c;
+	--list-hover-background: rgba(223, 202, 136, 0.27);
 }
 
 .vscode-light .button.is-light {
@@ -95,11 +111,12 @@ body.vscode-light {
 }
 
 .vscode-light .ht_master tr> td.search-result-cell {
-	background-color: #ffff00!important;
+	background-color: #ffff5f!important;
 }
 
 .vscode-light .find-widget {
-	background-color: rgb(221, 221, 221);
+	background-color: #f3f3f3; /*from vs code light */
+	/* filter: brightness(80%); */
 }
 
 .vscode-light .find-widget .divider {
@@ -107,7 +124,8 @@ body.vscode-light {
 }
 
 .vscode-light .find-widget .btn.active {
-	background-color: #a3c7ff;
+	border-color: rgba(0, 122, 204, 0);
+	background-color:rgba(0, 144, 241, 0.2)
 }
 
 .vscode-light .find-widget .error-message {
@@ -115,16 +133,22 @@ body.vscode-light {
 }
 
 .vscode-light .options-title {
-	font-size: 130%;
 	color: #657b83;
 }
 
 .vscode-light .all-options table {
-	border: 1px solid #8e8e8e;
-	border-collapse: initial;
-	border-radius: 10px;
+	border: 1px solid #5e5e5e;
 }
 
 .vscode-light a {
 	color: #0866ff;
+}
+
+.vscode-light .handsontable .htDimmed {
+	/*color: #8c8c8c*/ /*harder to read*/
+	color: inherit;
+}
+
+.vscode-light .row-col-insert-btns {
+	border-left: 1px solid #5e5e5e;
 }
